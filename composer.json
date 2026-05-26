@@ -1,0 +1,29 @@
+{
+    "name": "roxdigital/cache-invalidation",
+    "description": "Configurable Statamic static cache invalidation for pagebuilder-driven sites.",
+    "type": "statamic-addon",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "RoxDigital\\CacheInvalidation\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RoxDigital\\CacheInvalidation\\ServiceProvider"
+            ]
+        },
+        "statamic": {
+            "name": "Cache Invalidation",
+            "description": "Configurable static cache invalidation for pagebuilder-driven sites."
+        }
+    },
+    "require": {
+        "laravel/framework": "^12.0 || ^13.0",
+        "php": "^8.4",
+        "statamic/cms": "^6.0"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
