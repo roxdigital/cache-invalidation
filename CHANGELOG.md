@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-06-02
+
+### Fixed
+- Made gh actions work with node24
+
 ## [1.0.2] - 2026-06-02
 
 ### Fixed
