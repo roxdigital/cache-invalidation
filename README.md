@@ -5,14 +5,6 @@ Statamic addon for targeted static cache invalidation on pagebuilder-driven site
 ## Installation
 
 Install the package:
-
-```bash
-composer require roxdigital/cache-invalidation
-php artisan vendor:publish --tag=cache-invalidation-config
-```
-
-For local development, add a path repository to the host app first:
-
 ```json
 {
     "repositories": [
@@ -23,9 +15,14 @@ For local development, add a path repository to the host app first:
     ]
 }
 ```
+ 
+ Create the symlink & publish the config:
+```bash
+composer require roxdigital/cache-invalidation
+php artisan vendor:publish --tag=cache-invalidation-config
+```
 
 Then configure Statamic to use the addon invalidator:
-
 ```php
 // config/statamic/static_caching.php
 'invalidation' => [

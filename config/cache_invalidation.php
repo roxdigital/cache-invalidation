@@ -29,8 +29,6 @@ return [
     */
 
     'globals_flush_all' => [
-        'seo',
-        'trackers',
         'redirects',
     ],
 
