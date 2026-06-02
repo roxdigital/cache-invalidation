@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Check PHP syntax
+        run: find src config -name '*.php' | xargs php -l
+
+  changelog:
+    name: Update changelog
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out main so we commit back to the default branch, not the tag.
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepend release notes to CHANGELOG.md
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const release = context.payload.release;
+            const version = release.tag_name.replace(/^v/, '');
+            const date = release.published_at.substring(0, 10);
+            const notes = (release.body || '').trim() || '_No release notes provided._';
+
+            const entry = `## [${version}] - ${date}\n\n${notes}\n`;
+
+            const path = 'CHANGELOG.md';
+            const header = '# Changelog\n\nAll notable changes to this project will be documented in this file.\n';
+
+            let updated;
+            if (!fs.existsSync(path)) {
+              updated = header + '\n' + entry;
+            } else {
+              const current = fs.readFileSync(path, 'utf8');
+              // Insert before the first existing release entry (first line starting with "## ")
+              const firstEntry = current.indexOf('\n## ');
+              if (firstEntry === -1) {
+                updated = current.trimEnd() + '\n\n' + entry;
+              } else {
+                updated = current.slice(0, firstEntry + 1) + entry + '\n' + current.slice(firstEntry + 1);
+              }
+            }
+
+            fs.writeFileSync(path, updated);
+            core.info(`CHANGELOG.md updated for ${version}`);
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --staged --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "docs: add changelog entry for ${{ github.event.release.tag_name }}"
+          git push origin main

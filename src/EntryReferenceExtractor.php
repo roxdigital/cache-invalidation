@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoxDigital\CacheInvalidation;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Statamic\Entries\Entry;
 
 class EntryReferenceExtractor
@@ -26,7 +27,7 @@ class EntryReferenceExtractor
      */
     private function extractRecursive(mixed $value): array
     {
-        if (is_string($value)) {
+        if (is_string($value) && Str::isUuid($value)) {
             return [$value];
         }
 
@@ -41,7 +42,7 @@ class EntryReferenceExtractor
                 ->all();
         }
 
-        if (is_array($value) && isset($value['id']) && is_string($value['id'])) {
+        if (is_array($value) && isset($value['id']) && is_string($value['id']) && Str::isUuid($value['id'])) {
             return [$value['id']];
         }
 

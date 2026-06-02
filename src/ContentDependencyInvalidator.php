@@ -43,14 +43,31 @@ class ContentDependencyInvalidator extends DefaultInvalidator
         if ($item instanceof Entry && $this->entryAffectsPageIndex($item)) {
             $this->pagebuilder->clearIndex();
         }
+
+        parent::invalidate($item);
     }
 
     private function entryAffectsPageIndex(Entry $entry): bool
     {
-        $pagebuilderCollections = config('cache_invalidation.pagebuilder_collections', ['pages']);
+        $collection = $entry->collectionHandle();
 
-        return in_array($entry->collectionHandle(), $pagebuilderCollections, true)
-            || $entry->collectionHandle() === 'reusable_blocks';
+        if (in_array($collection, config('cache_invalidation.pagebuilder_collections', ['pages']), true)) {
+            return true;
+        }
+
+        foreach (config('cache_invalidation.collection_entry_rules', []) as $ruleCollection => $rules) {
+            if ($ruleCollection !== $collection) {
+                continue;
+            }
+
+            foreach ((array) $rules as $rule) {
+                if (($rule['block'] ?? null) === PagebuilderBlockType::ReusableBlock->value) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function shouldFlushAll(mixed $item): bool
@@ -101,19 +118,7 @@ class ContentDependencyInvalidator extends DefaultInvalidator
 
     private function urlsForGlobal(Variables $variables): Collection
     {
-        $handle = $variables->globalSet()->handle();
-        $blockTargets = config('cache_invalidation.global_target_blocks', []);
-        $urls = $this->configuredUrls('global_urls', $handle);
-
-        if (! isset($blockTargets[$handle])) {
-            return $urls;
-        }
-
-        $types = (array) $blockTargets[$handle];
-
-        return $urls->merge($this->pagebuilder->urlsForBlocksMatching(
-            fn (array $block): bool => in_array($block['type'] ?? null, $types, true),
-        ));
+        return $this->urlsWithBlockTargets('global_urls', 'global_target_blocks', $variables->globalSet()->handle());
     }
 
     private function urlsForEntry(Entry $entry): Collection
@@ -144,15 +149,19 @@ class ContentDependencyInvalidator extends DefaultInvalidator
 
     private function urlsForTaxonomyTerm(LocalizedTerm $term): Collection
     {
-        $taxonomy = $term->taxonomyHandle();
-        $blockTargets = config('cache_invalidation.taxonomy_target_blocks', []);
-        $urls = $this->configuredUrls('taxonomy_urls', $taxonomy);
+        return $this->urlsWithBlockTargets('taxonomy_urls', 'taxonomy_target_blocks', $term->taxonomyHandle());
+    }
 
-        if (! isset($blockTargets[$taxonomy])) {
+    private function urlsWithBlockTargets(string $urlsKey, string $targetsKey, string $handle): Collection
+    {
+        $urls = $this->configuredUrls($urlsKey, $handle);
+        $blockTargets = config("cache_invalidation.{$targetsKey}", []);
+
+        if (! isset($blockTargets[$handle])) {
             return $urls;
         }
 
-        $types = (array) $blockTargets[$taxonomy];
+        $types = (array) $blockTargets[$handle];
 
         return $urls->merge($this->pagebuilder->urlsForBlocksMatching(
             fn (array $block): bool => in_array($block['type'] ?? null, $types, true),

@@ -1,10 +1,66 @@
-# Rox Digital Cache Invalidation
+# Cache Invalidation
 
-Statamic addon for targeted static cache invalidation on pagebuilder-driven sites.
+Targeted static and half-measure cache invalidation for Statamic sites built with a pagebuilder.
+
+Instead of flushing the entire cache on every save, this addon builds a block-index of your pages and invalidates only the URLs that reference the changed content — by entry, global, navigation, or taxonomy term.
+
+[![Latest Release](https://img.shields.io/github/v/release/roxdigital/cache-invalidation)](https://github.com/roxdigital/cache-invalidation/releases)
+[![PHP](https://img.shields.io/badge/PHP-8.4%2B-blue)](https://www.php.net)
+[![Statamic](https://img.shields.io/badge/Statamic-6.x-FF269E)](https://statamic.com)
+
+## Requirements
+
+| Dependency | Version |
+|------------|---------|
+| PHP | `^8.4` |
+| Laravel | `^12.0 \|\| ^13.0` |
+| Statamic | `^6.0` |
+
+---
 
 ## Installation
 
-Install the package:
+### 1. Add the repository
+
+Add the GitHub VCS source to your project's `composer.json`:
+
+```json
+{
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/roxdigital/cache-invalidation"
+        }
+    ]
+}
+```
+
+### 2. Require and publish
+
+```bash
+composer require roxdigital/cache-invalidation
+php artisan vendor:publish --tag=cache-invalidation-config
+```
+
+### 3. Configure Statamic
+
+In `config/statamic/static_caching.php`, point the invalidation class at the addon:
+
+```php
+'invalidation' => [
+    'class' => \RoxDigital\CacheInvalidation\ContentDependencyInvalidator::class,
+    'rules' => [],
+],
+```
+
+> **Note:** This addon fully replaces Statamic's rule-based invalidator. Keep `rules` as an empty array.
+
+---
+
+## Local development
+
+Use a Composer path repository to work against a local clone:
+
 ```json
 {
     "repositories": [
@@ -15,41 +71,64 @@ Install the package:
     ]
 }
 ```
- 
- Create the symlink & publish the config:
+
 ```bash
-composer require roxdigital/cache-invalidation
-php artisan vendor:publish --tag=cache-invalidation-config
+composer require roxdigital/cache-invalidation:@dev
 ```
 
-Then configure Statamic to use the addon invalidator:
-```php
-// config/statamic/static_caching.php
-'invalidation' => [
-    'class' => RoxDigital\CacheInvalidation\ContentDependencyInvalidator::class,
-    'rules' => [],
-],
-```
+---
 
 ## Configuration
 
-Edit `config/cache_invalidation.php` after publishing it.
+Edit `config/cache_invalidation.php` after publishing.
 
 ```php
 return [
+
+    /*
+     | Collections whose entries have a pagebuilder replicator field.
+     | Only pages from these collections are indexed.
+     */
     'pagebuilder_collections' => ['pages'],
 
-    'globals_flush_all' => ['seo', 'tracking'],
+    /*
+     | Globals that flush the entire static cache on save.
+     | Use for globals rendered in shared layout (nav, SEO, redirects).
+     */
+    'globals_flush_all' => ['redirects'],
+
+    /*
+     | Navigations that flush the entire static cache on save.
+     */
     'navs_flush_all' => ['main_nav'],
 
+    /*
+     | Globals that invalidate pages containing specific pagebuilder block types.
+     | Format: 'global_handle' => ['block_type', ...]
+     */
     'global_target_blocks' => [
-        'reviews' => ['statistics'],
+        'reviews' => ['statistics_block'],
     ],
 
+    /*
+     | Globals that always invalidate explicit URLs.
+     | Format: 'global_handle' => ['/url', ...]
+     */
     'global_urls' => [
         'settings' => ['/'],
     ],
 
+    /*
+     | Rules for collection entries.
+     |
+     | Use 'all' to invalidate every cached URL when any entry in the
+     | collection is saved.
+     |
+     | Rule without field: invalidate every page containing this block type.
+     | Rule with field:    invalidate pages where the field references this entry.
+     |
+     | Format: 'collection_handle' => [['block' => 'type', 'field' => 'handle'], ...]
+     */
     'collection_entry_rules' => [
         'reusable_blocks' => [
             ['block' => 'reusable_block', 'field' => 'entry'],
@@ -62,48 +141,108 @@ return [
         ],
     ],
 
+    /*
+     | Collections that always invalidate explicit URLs (e.g. overview pages).
+     | Format: 'collection_handle' => ['/url', ...]
+     */
     'collection_urls' => [
         'articles' => ['/blog'],
     ],
 
+    /*
+     | Taxonomies that invalidate pages containing specific block types.
+     | Format: 'taxonomy_handle' => ['block_type', ...]
+     */
     'taxonomy_target_blocks' => [
         'tags' => ['article_overview_block'],
     ],
 
+    /*
+     | Taxonomies that always invalidate explicit URLs.
+     | Format: 'taxonomy_handle' => ['/url', ...]
+     */
     'taxonomy_urls' => [
         'tags' => ['/blog'],
     ],
+
 ];
 ```
 
-## Rules
+---
 
-- `pagebuilder_collections`: collections scanned for a raw `pagebuilder` field.
-- `globals_flush_all`: global handles that flush the whole static cache.
-- `navs_flush_all`: navigation handles that flush the whole static cache.
-- `global_target_blocks`: global handles that invalidate pages containing listed pagebuilder block types.
-- `global_urls`: global handles that invalidate explicit URLs.
-- `collection_entry_rules`: collection handles that invalidate matching pagebuilder blocks.
-- `collection_urls`: collection handles that invalidate explicit URLs, usually overview pages.
-- `taxonomy_target_blocks`: taxonomy handles that invalidate pages containing listed pagebuilder block types.
-- `taxonomy_urls`: taxonomy handles that invalidate explicit URLs.
+## How it works
 
-Collection rules can target every page containing a block:
+When any content is saved, the addon resolves which cached URLs to clear:
+
+| Trigger | Behaviour |
+|---------|-----------|
+| Global in `globals_flush_all` | Flush entire cache + clear block index |
+| Nav in `navs_flush_all` | Flush entire cache + clear block index |
+| Global with `global_target_blocks` rule | Invalidate pages containing those block types |
+| Global with `global_urls` rule | Invalidate the configured URLs |
+| Entry in `collection_entry_rules` — `'all'` | Invalidate every currently-cached URL |
+| Entry in `collection_entry_rules` — block rules | Invalidate pages that match via the block index |
+| Entry in `collection_urls` | Invalidate the configured URLs |
+| Entry — own URL | Always included |
+| Taxonomy term | Same pattern as globals (block targets + explicit URLs) |
+
+### Block index
+
+The addon maintains a `url → blocks[]` index in your Laravel cache. Each block is stored as a slim record containing only its `type` and the fields referenced in your rules — rich text, images, and other large field values are discarded at build time to keep the index small.
+
+The index is built on first access and stored forever. It is cleared when:
+
+- The full cache is flushed (global/nav flush-all).
+- Any entry in `pagebuilder_collections` is saved (page layout may have changed).
+- Any entry whose collection has a `reusable_block` rule is saved (embedded content may have changed).
+
+### Reusable blocks
+
+Blocks of type `reusable_block` are expanded inline when the index is built, so pages that embed a reusable block are correctly invalidated when that block entry is updated.
+
+Circular references are detected and skipped.
+
+### Extending
+
+Override `customEntryUrls()` in a site-specific subclass for collections that cannot be expressed with config-driven rules:
 
 ```php
-['block' => 'project_grid']
+class SiteInvalidator extends \RoxDigital\CacheInvalidation\ContentDependencyInvalidator
+{
+    protected function customEntryUrls(\Statamic\Entries\Entry $entry): \Illuminate\Support\Collection
+    {
+        if ($entry->collectionHandle() === 'team') {
+            return collect(['/about']);
+        }
+
+        return collect();
+    }
+}
 ```
 
-Or only pages where a block field references the saved entry:
+Register your subclass in `config/statamic/static_caching.php`:
 
 ```php
-['block' => 'project_grid', 'field' => 'projects']
+'invalidation' => [
+    'class' => \App\StaticCaching\SiteInvalidator::class,
+    'rules' => [],
+],
 ```
 
-Use `'collection_handle' => 'all'` only when saving an entry in that collection should invalidate every cached URL.
+---
 
 ## Performance
 
-Targeted pagebuilder invalidation uses a cached `url => blocks` index. The index is cleared when the whole cache is flushed, when an entry in `pagebuilder_collections` is saved, or when a `reusable_blocks` entry is saved.
+- **Use a queue driver in production.** Statamic dispatches invalidation jobs to the queue. Without a queue driver, invalidation runs synchronously inside the CP save request.
+- **Use Redis (or another fast cache driver).** The block index is stored as a single serialised entry. A fast driver reduces index rebuild time.
+- The index is built once per cache miss. Subsequent invalidations reuse the cached index with no database queries.
 
-Use a queue driver in production so Statamic invalidation work runs outside the Control Panel save request.
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Proprietary — Rox Digital.
