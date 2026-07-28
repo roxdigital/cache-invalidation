@@ -183,9 +183,9 @@ When any content is saved, the addon resolves which cached URLs to clear:
 
 | Trigger | Behaviour |
 |---------|-----------|
-| Global in `globals_flush_all` | Full flush (incl. nocache regions + cached errors) + clear block index |
-| Nav in `navs_flush_all` | Full flush (incl. nocache regions + cached errors) + clear block index |
-| Form blueprint save (when `forms_flush_all`) | Full flush (incl. nocache regions + cached errors) + clear block index |
+| Global in `globals_flush_all` | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
+| Nav in `navs_flush_all` | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
+| Form blueprint save (when `forms_flush_all`) | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
 | Global with `global_target_blocks` rule | Invalidate pages containing those block types |
 | Global with `global_urls` rule | Invalidate the configured URLs |
 | Entry in `collection_entry_rules` — `'all'` | Invalidate every currently-cached URL |

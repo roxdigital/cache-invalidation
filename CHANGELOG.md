@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Full flushes now go through Statamic's `StaticCache` manager instead of the cacher directly, matching `statamic:static:clear`. This additionally clears nocache regions, the dedicated static cache store and cached error pages, so a cached 404 can no longer survive a flush with a stale nav, footer or globals.
+- Full flushes now go through Statamic's `StaticCache` manager instead of the cacher directly, so they behave exactly like `statamic:static:clear`. Flushing the cacher alone left `nocache::` regions and sessions behind (they are not tracked in the cacher's URL list), and never flushed a dedicated `static_cache` store wholesale. Cached pages — including shared error pages such as the 404 — were already cleared either way; the leak was nocache regions surviving a flush and being restored into freshly rendered pages.
 
 ## [1.0.3] - 2026-06-02
 
