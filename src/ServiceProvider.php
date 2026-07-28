@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace RoxDigital\CacheInvalidation;
 
+use Statamic\Events\BlueprintSaved;
 use Statamic\Providers\AddonServiceProvider;
 
 class ServiceProvider extends AddonServiceProvider
 {
     protected $config = false;
+
+    protected $listen = [
+        BlueprintSaved::class => [
+            FlushStaticCacheOnFormBlueprintSaved::class,
+        ],
+    ];
 
     public function register(): void
     {

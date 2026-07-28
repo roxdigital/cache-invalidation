@@ -103,6 +103,13 @@ return [
     'navs_flush_all' => ['main_nav'],
 
     /*
+     | Flush the entire static cache when a form blueprint is saved, so field
+     | changes show up on every page that embeds the form. Set to false to
+     | leave the cache untouched on form blueprint saves.
+     */
+    'forms_flush_all' => true,
+
+    /*
      | Globals that invalidate pages containing specific pagebuilder block types.
      | Format: 'global_handle' => ['block_type', ...]
      */
@@ -176,8 +183,9 @@ When any content is saved, the addon resolves which cached URLs to clear:
 
 | Trigger | Behaviour |
 |---------|-----------|
-| Global in `globals_flush_all` | Flush entire cache + clear block index |
-| Nav in `navs_flush_all` | Flush entire cache + clear block index |
+| Global in `globals_flush_all` | Flush entire cache, shared 404 cache + clear block index |
+| Nav in `navs_flush_all` | Flush entire cache, shared 404 cache + clear block index |
+| Form blueprint save (when `forms_flush_all`) | Flush entire cache, shared 404 cache + clear block index |
 | Global with `global_target_blocks` rule | Invalidate pages containing those block types |
 | Global with `global_urls` rule | Invalidate the configured URLs |
 | Entry in `collection_entry_rules` — `'all'` | Invalidate every currently-cached URL |
@@ -192,7 +200,7 @@ The addon maintains a `url → blocks[]` index in your Laravel cache. Each block
 
 The index is built on first access and stored forever. It is cleared when:
 
-- The full cache is flushed (global/nav flush-all).
+- The full cache is flushed (global/nav flush-all or form blueprint save).
 - Any entry in `pagebuilder_collections` is saved (page layout may have changed).
 - Any entry whose collection has a `reusable_block` rule is saved (embedded content may have changed).
 

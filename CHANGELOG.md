@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `FlushStaticCacheOnFormBlueprintSaved` — flushes the entire static cache when a form blueprint is saved, so changed form fields are reflected on every page that embeds the form. Toggle with the `forms_flush_all` config option.
+- `StaticCacheFlusher` — single place for full-cache flushes, also invalidating the shared `__shared-errors` 404 pages and clearing the block index.
+
 ## [1.0.3] - 2026-06-02
 
 ### Fixed

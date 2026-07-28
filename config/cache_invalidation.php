@@ -44,6 +44,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Flush the entire static cache when a form blueprint is saved
+    |--------------------------------------------------------------------------
+    |
+    | A form blueprint change alters the fields rendered by every page that
+    | embeds that form, and those pages cannot be resolved from the block
+    | index, so the whole cache is flushed.
+    |
+    */
+
+    'forms_flush_all' => true,
+
+    /*
+    |--------------------------------------------------------------------------
     | Globals that target pagebuilder block types
     |--------------------------------------------------------------------------
     |

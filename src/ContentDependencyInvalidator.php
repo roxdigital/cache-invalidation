@@ -20,6 +20,7 @@ class ContentDependencyInvalidator extends DefaultInvalidator
         array $rules,
         private readonly PagebuilderDependencyScanner $pagebuilder,
         private readonly EntryReferenceExtractor $references,
+        private readonly StaticCacheFlusher $cache,
     ) {
         parent::__construct($cacher, $rules);
     }
@@ -27,8 +28,7 @@ class ContentDependencyInvalidator extends DefaultInvalidator
     public function invalidate($item): void
     {
         if ($this->shouldFlushAll($item)) {
-            $this->cacher->flush();
-            $this->pagebuilder->clearIndex();
+            $this->cache->flush();
 
             return;
         }
