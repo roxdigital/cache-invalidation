@@ -4,37 +4,25 @@ declare(strict_types=1);
 
 namespace RoxDigital\CacheInvalidation;
 
-use Illuminate\Support\Collection;
-use Statamic\Facades\Site;
-use Statamic\StaticCaching\Cacher;
+use Statamic\Facades\StaticCache;
 
 class StaticCacheFlusher
 {
     public function __construct(
-        private readonly Cacher $cacher,
         private readonly PagebuilderDependencyScanner $pagebuilder,
     ) {}
 
+    /**
+     * Flush the entire static cache the same way `statamic:static:clear` does.
+     *
+     * Going through the manager rather than the cacher also clears nocache
+     * regions, the dedicated static cache store, and cached error pages, so a
+     * shared 404 cannot survive a flush with stale layout, nav or globals.
+     */
     public function flush(): void
     {
-        $this->invalidateSharedErrorUrls();
-        $this->cacher->flush();
+        StaticCache::flush();
+
         $this->pagebuilder->clearIndex();
-    }
-
-    private function invalidateSharedErrorUrls(): void
-    {
-        $this->cacher->invalidateUrls($this->sharedErrorUrls()->all());
-    }
-
-    private function sharedErrorUrls(): Collection
-    {
-        return Site::all()
-            ->flatMap(fn ($site): array => [
-                "/__shared-errors/{$site->handle()}/404",
-                rtrim($site->absoluteUrl(), '/') . "/__shared-errors/{$site->handle()}/404",
-            ])
-            ->unique()
-            ->values();
     }
 }

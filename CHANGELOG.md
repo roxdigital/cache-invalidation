@@ -7,7 +7,11 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - `FlushStaticCacheOnFormBlueprintSaved` — flushes the entire static cache when a form blueprint is saved, so changed form fields are reflected on every page that embeds the form. Toggle with the `forms_flush_all` config option.
-- `StaticCacheFlusher` — single place for full-cache flushes, also invalidating the shared `__shared-errors` 404 pages and clearing the block index.
+- `StaticCacheFlusher` — single place for full-cache flushes, used by the global/nav flush-all rules as well as form blueprint saves.
+
+### Fixed
+
+- Full flushes now go through Statamic's `StaticCache` manager instead of the cacher directly, matching `statamic:static:clear`. This additionally clears nocache regions, the dedicated static cache store and cached error pages, so a cached 404 can no longer survive a flush with a stale nav, footer or globals.
 
 ## [1.0.3] - 2026-06-02
 
