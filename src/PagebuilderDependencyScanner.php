@@ -75,9 +75,11 @@ class PagebuilderDependencyScanner
     }
 
     /**
-     * Returns the field handles that must be kept in the index.
-     * Only fields referenced in collection_entry_rules are needed;
-     * global/taxonomy predicates only match on block type.
+     * Returns the block field handles that must be kept in the index.
+     *
+     * Only 'block' rules match against indexed blocks; global and taxonomy
+     * predicates match on block type alone, and the 'field' of a 'collection'
+     * rule names a field on an entry rather than on a block.
      *
      * @return list<string>
      */
@@ -85,7 +87,10 @@ class PagebuilderDependencyScanner
     {
         return collect(config('cache_invalidation.collection_entry_rules', []))
             ->flatMap(fn (mixed $rules): array => is_array($rules)
-                ? collect($rules)->pluck('field')->filter()->all()
+                ? collect($rules)
+                    ->filter(fn (mixed $rule): bool => is_array($rule) && isset($rule['block'], $rule['field']))
+                    ->pluck('field')
+                    ->all()
                 : []
             )
             ->unique()

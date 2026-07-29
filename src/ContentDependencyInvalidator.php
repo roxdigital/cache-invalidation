@@ -6,6 +6,7 @@ namespace RoxDigital\CacheInvalidation;
 
 use Illuminate\Support\Collection;
 use Statamic\Entries\Entry;
+use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Globals\Variables;
 use Statamic\StaticCaching\Cacher;
 use Statamic\StaticCaching\DefaultInvalidator;
@@ -144,13 +145,84 @@ class ContentDependencyInvalidator extends DefaultInvalidator
             return $this->allCachedUrls()->merge($urls);
         }
 
+        return $urls
+            ->merge($this->blockRuleUrls((array) $rule, $entry))
+            ->merge($this->parentRuleUrls((array) $rule, $entry))
+            ->merge($this->referencingEntryRuleUrls((array) $rule, $entry));
+    }
+
+    /**
+     * ['block' => 'x', 'field' => 'y'] — cached pages containing that block.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     */
+    private function blockRuleUrls(array $rules, Entry $entry): Collection
+    {
+        $blockRules = array_values(array_filter(
+            $rules,
+            fn (array $rule): bool => isset($rule['block']),
+        ));
+
+        if ($blockRules === []) {
+            return collect();
+        }
+
         $entryId = $entry->id();
 
-        return $urls->merge(
-            $this->pagebuilder->urlsForBlocksMatching(
-                fn (array $block): bool => $this->blockMatchesAnyRule($block, (array) $rule, $entryId),
-            ),
+        return $this->pagebuilder->urlsForBlocksMatching(
+            fn (array $block): bool => $this->blockMatchesAnyRule($block, $blockRules, $entryId),
         );
+    }
+
+    /**
+     * ['parent' => true] — the saved entry's parent page, for a structured
+     * collection whose parent template renders its children.
+     *
+     * Opt-in per collection rather than automatic: in a collection mounted at
+     * the site root, a top-level entry's parent() is the root itself, so
+     * applying this everywhere would clear the home page on every save.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     */
+    private function parentRuleUrls(array $rules, Entry $entry): Collection
+    {
+        $wantsParent = collect($rules)->contains(
+            fn (array $rule): bool => ($rule['parent'] ?? false) === true,
+        );
+
+        if (! $wantsParent) {
+            return collect();
+        }
+
+        $url = $entry->parent()?->absoluteUrl();
+
+        return $url ? collect([$url]) : collect();
+    }
+
+    /**
+     * ['collection' => 'x', 'field' => 'y'] — the URLs of entries in collection
+     * x whose field y references the saved entry. The inverse of a block rule:
+     * for relations rendered by a collection's own template rather than by a
+     * pagebuilder block, so the block index cannot reach them.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     */
+    private function referencingEntryRuleUrls(array $rules, Entry $entry): Collection
+    {
+        $entryId = $entry->id();
+
+        return collect($rules)
+            ->filter(fn (array $rule): bool => isset($rule['collection'], $rule['field']))
+            ->flatMap(fn (array $rule): array => EntryFacade::whereCollection($rule['collection'])
+                ->filter(fn (Entry $candidate): bool => $this->valueReferencesEntry(
+                    $candidate->get($rule['field']),
+                    $entryId,
+                ))
+                ->map(fn (Entry $candidate): ?string => $candidate->absoluteUrl())
+                ->filter()
+                ->all())
+            ->unique()
+            ->values();
     }
 
     protected function urlsForTaxonomyTerm(LocalizedTerm $term): Collection
