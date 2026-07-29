@@ -107,6 +107,26 @@ return [
     | Rule with field: ['block' => 'block_type', 'field' => 'field_handle']
     | Flush all cached URLs for a collection: 'collection' => 'all'
     |
+    | The two rules above resolve pages through the block index, so they only
+    | reach what a pagebuilder block renders. For relations rendered by a
+    | collection's own template there are two more:
+    |
+    | Parent page: ['parent' => true]
+    |     Clears the saved entry's parent page. For a structured collection
+    |     whose parent template lists its children.
+    |     Opt-in per collection, not automatic: in a collection mounted at the
+    |     site root a top-level entry's parent is the root itself, so applying
+    |     this everywhere would clear the home page on every save.
+    |
+    | Referencing entries: ['collection' => 'handle', 'field' => 'field_handle']
+    |     Clears the URL of every entry in that collection whose field
+    |     references the saved entry — the inverse of a block rule. Use it when
+    |     the referencing markup is in a template rather than a block, e.g. an
+    |     article detail page rendering its author from the employees
+    |     collection.
+    |     This walks the named collection on each save of the source
+    |     collection, so keep an eye on it for very large collections.
+    |
     */
 
     'collection_entry_rules' => [
