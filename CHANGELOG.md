@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-07-29
+
+## What's Changed
+* fix: close static-cache invalidation gaps by @Bahbv in https://github.com/roxdigital/cache-invalidation/pull/1
+
+## New Contributors
+* @Bahbv made their first contribution in https://github.com/roxdigital/cache-invalidation/pull/1
+
+**Full Changelog**: https://github.com/roxdigital/cache-invalidation/compare/v1.0.4...v1.1.0
+
 ## [1.0.4] - 2026-07-28
 
 ### Added
