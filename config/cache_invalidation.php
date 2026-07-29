@@ -44,6 +44,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Collection trees that flush the entire static cache
+    |--------------------------------------------------------------------------
+    |
+    | Saving a collection tree always clears the block index, because a move
+    | changes entry URLs and the index is keyed on them. List a collection here
+    | as well when its tree drives shared output — a nav or breadcrumbs built
+    | from the page tree, say — since reordering it changes every cached page
+    | and no block rule can express that. Empty by default.
+    |
+    */
+
+    'collection_trees_flush_all' => [
+        //
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Flush the entire static cache when a form blueprint is saved
     |--------------------------------------------------------------------------
     |

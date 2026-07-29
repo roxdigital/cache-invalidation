@@ -27,8 +27,8 @@ class EntryReferenceExtractor
      */
     private function extractRecursive(mixed $value): array
     {
-        if (is_string($value) && Str::isUuid($value)) {
-            return [$value];
+        if (is_string($value)) {
+            return $this->extractFromString($value);
         }
 
         if ($value instanceof Entry) {
@@ -42,10 +42,6 @@ class EntryReferenceExtractor
                 ->all();
         }
 
-        if (is_array($value) && isset($value['id']) && is_string($value['id']) && Str::isUuid($value['id'])) {
-            return [$value['id']];
-        }
-
         if (is_array($value)) {
             return collect($value)
                 ->flatMap(fn (mixed $item): array => $this->extractRecursive($item))
@@ -54,5 +50,27 @@ class EntryReferenceExtractor
         }
 
         return [];
+    }
+
+    /**
+     * A bare id covers the entries fieldtype. The link fieldtype stores
+     * "entry::<id>" and Bard stores hrefs as "statamic://entry::<id>", so a rule
+     * pointed at either of those fields would otherwise never match.
+     *
+     * @return array<int, string>
+     */
+    private function extractFromString(string $value): array
+    {
+        if (Str::isUuid($value)) {
+            return [$value];
+        }
+
+        if (! Str::contains($value, 'entry::')) {
+            return [];
+        }
+
+        $id = Str::after($value, 'entry::');
+
+        return Str::isUuid($id) ? [$id] : [];
     }
 }

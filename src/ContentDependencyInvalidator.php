@@ -99,7 +99,7 @@ class ContentDependencyInvalidator extends DefaultInvalidator
         return false;
     }
 
-    private function urlsFor(mixed $item): Collection
+    protected function urlsFor(mixed $item): Collection
     {
         if ($item instanceof Variables) {
             return $this->urlsForGlobal($item);
@@ -116,20 +116,26 @@ class ContentDependencyInvalidator extends DefaultInvalidator
         return collect();
     }
 
-    private function urlsForGlobal(Variables $variables): Collection
+    protected function urlsForGlobal(Variables $variables): Collection
     {
         return $this->urlsWithBlockTargets('global_urls', 'global_target_blocks', $variables->globalSet()->handle());
     }
 
-    private function urlsForEntry(Entry $entry): Collection
+    protected function urlsForEntry(Entry $entry): Collection
     {
         $collection = $entry->collectionHandle();
         $rules = config('cache_invalidation.collection_entry_rules', []);
+
+        // Always applied: a collection having block rules does not mean those
+        // rules cover every way its entries surface. Anything rendered by a
+        // collection's own template, rather than by a pagebuilder block, can
+        // only be expressed here.
         $urls = $this->ownUrl($entry)
-            ->merge($this->configuredUrls('collection_urls', $collection));
+            ->merge($this->configuredUrls('collection_urls', $collection))
+            ->merge($this->customEntryUrls($entry));
 
         if (! array_key_exists($collection, $rules)) {
-            return $urls->merge($this->customEntryUrls($entry));
+            return $urls;
         }
 
         $rule = $rules[$collection];
@@ -147,7 +153,7 @@ class ContentDependencyInvalidator extends DefaultInvalidator
         );
     }
 
-    private function urlsForTaxonomyTerm(LocalizedTerm $term): Collection
+    protected function urlsForTaxonomyTerm(LocalizedTerm $term): Collection
     {
         return $this->urlsWithBlockTargets('taxonomy_urls', 'taxonomy_target_blocks', $term->taxonomyHandle());
     }
