@@ -28,7 +28,26 @@ class PagebuilderDependencyScanner
 
     public function clearIndex(): void
     {
+        Cache::forget($this->indexKey());
         Cache::forget(self::INDEX_KEY);
+    }
+
+    /**
+     * The index only keeps the block fields named in collection_entry_rules
+     * (see slimBlocks), so a cached index built under a different rule set is
+     * not just stale, it is missing keys the new rules match on. Fingerprinting
+     * the config into the key means such an index is never read: without this,
+     * adding a field-scoped rule silently matches nothing until something else
+     * happens to clear the index.
+     */
+    private function indexKey(): string
+    {
+        $fingerprint = md5(serialize([
+            config('cache_invalidation.collection_entry_rules', []),
+            config('cache_invalidation.pagebuilder_collections', ['pages']),
+        ]));
+
+        return self::INDEX_KEY.'.'.$fingerprint;
     }
 
     /**
@@ -36,7 +55,7 @@ class PagebuilderDependencyScanner
      */
     private function getIndex(): array
     {
-        return Cache::rememberForever(self::INDEX_KEY, fn (): array => $this->buildIndex());
+        return Cache::rememberForever($this->indexKey(), fn (): array => $this->buildIndex());
     }
 
     /**
