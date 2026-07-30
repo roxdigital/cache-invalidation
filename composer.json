@@ -2,7 +2,7 @@
   "name": "roxdigital/cache-invalidation",
   "description": "Configurable Statamic static/half cache invalidation for pagebuilder-driven sites.",
   "type": "statamic-addon",
-  "license": "proprietary",
+  "license": "MIT",
   "autoload": {
     "psr-4": {
       "RoxDigital\\CacheInvalidation\\": "src/"

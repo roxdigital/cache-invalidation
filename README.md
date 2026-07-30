@@ -7,6 +7,7 @@ Instead of flushing the entire cache on every save, this addon builds a block-in
 [![Latest Release](https://img.shields.io/github/v/release/roxdigital/cache-invalidation)](https://github.com/roxdigital/cache-invalidation/releases)
 [![PHP](https://img.shields.io/badge/PHP-8.4%2B-blue)](https://www.php.net)
 [![Statamic](https://img.shields.io/badge/Statamic-6.x-FF269E)](https://statamic.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## Requirements
 
@@ -253,4 +254,11 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Proprietary — Rox Digital.
+Released under the [MIT License](LICENSE). Copyright © 2026 Rox Digital.
+
+You are free to use, modify and distribute this addon, including commercially,
+provided the copyright notice and licence text are kept intact. It is provided
+**as is**, without warranty of any kind — Rox Digital accepts no liability for
+any claim or damages arising from its use. Cache invalidation affects what your
+visitors see: verify the behaviour against your own site and caching strategy
+before relying on it in production.

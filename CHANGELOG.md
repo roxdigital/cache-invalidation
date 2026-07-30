@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Relicensed from proprietary to the MIT License. Copyright remains with Rox
+  Digital and the notice must be retained in redistributions, while the licence
+  disclaims all warranty and liability. `composer.json` now declares `MIT` and a
+  `LICENSE` file has been added.
+
 ## [1.2.0] - 2026-07-29
 
 ### Added
