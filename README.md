@@ -45,16 +45,16 @@ php artisan vendor:publish --tag=cache-invalidation-config
 
 ### 3. Configure Statamic
 
-In `config/statamic/static_caching.php`, point the invalidation class at the addon:
+Nothing to do in most cases: the addon registers itself as the invalidator when `statamic.static_caching.invalidation.class` is unset, which is Statamic's default. Set it explicitly only to point at your own subclass:
 
 ```php
 'invalidation' => [
-    'class' => \RoxDigital\CacheInvalidation\ContentDependencyInvalidator::class,
+    'class' => \App\StaticCaching\SiteInvalidator::class,
     'rules' => [],
 ],
 ```
 
-> **Note:** This addon fully replaces Statamic's rule-based invalidator. Keep `rules` as an empty array.
+> **Note:** This addon replaces Statamic's rule-based invalidator. Keep `rules` as an empty array.
 
 ---
 
@@ -81,155 +81,100 @@ composer require roxdigital/cache-invalidation:@dev
 
 ## Configuration
 
-Edit `config/cache_invalidation.php` after publishing.
+`config/cache_invalidation.php` documents every key inline. In short:
+
+| Key | Effect |
+|-----|--------|
+| `pagebuilder_collections` | Collections with a pagebuilder field. Only these are indexed. |
+| `globals_flush_all` | Global handles that flush the whole cache on save. |
+| `navs_flush_all` | Nav handles that flush the whole cache — structure edits and reorders. |
+| `collection_trees_flush_all` | Collections whose tree order drives shared output (a nav or breadcrumbs built from the page tree). Empty by default. |
+| `forms_flush_all` | `true` by default: a form blueprint save flushes the whole cache, since the changed fields render on every page embedding the form. |
+| `global_target_blocks` | `'global' => ['block_type', ...]` — invalidate pages containing those blocks. |
+| `global_urls` | `'global' => ['/url', ...]` |
+| `collection_entry_rules` | Per-collection entry rules — see below. |
+| `collection_urls` | `'collection' => ['/url', ...]` |
+| `taxonomy_target_blocks` | `'taxonomy' => ['block_type', ...]` |
+| `taxonomy_urls` | `'taxonomy' => ['/url', ...]` |
+
+### Entry rules
+
+Map a collection to `'all'` — invalidate every cached URL on any save — or to a list of rules:
 
 ```php
-return [
+'collection_entry_rules' => [
 
-    /*
-     | Collections whose entries have a pagebuilder replicator field.
-     | Only pages from these collections are indexed.
-     */
-    'pagebuilder_collections' => ['pages'],
+    // Pages containing this block type.
+    'articles' => [['block' => 'article_carousel']],
 
-    /*
-     | Globals that flush the entire static cache on save.
-     | Use for globals rendered in shared layout (nav, SEO, redirects).
-     */
-    'globals_flush_all' => ['redirects'],
+    // Pages where that block's field references the saved entry.
+    'reusable_blocks' => [['block' => 'reusable_block', 'field' => 'entry']],
 
-    /*
-     | Navigations that flush the entire static cache on save.
-     */
-    'navs_flush_all' => ['main_nav'],
+    // The saved entry's parent page, for a structured collection whose parent
+    // template lists its children. Opt-in per collection: in a collection
+    // mounted at the site root, a top-level entry's parent is the root itself.
+    'vacancies' => [['parent' => true]],
 
-    /*
-     | Flush the entire static cache when a form blueprint is saved, so field
-     | changes show up on every page that embeds the form. Set to false to
-     | leave the cache untouched on form blueprint saves.
-     */
-    'forms_flush_all' => true,
+    // Entries in another collection whose field references the saved entry —
+    // the inverse of a block rule, for relations rendered by a template (an
+    // article showing its author). Walks that collection on every save.
+    'employees' => [['collection' => 'articles', 'field' => 'author']],
 
-    /*
-     | Globals that invalidate pages containing specific pagebuilder block types.
-     | Format: 'global_handle' => ['block_type', ...]
-     */
-    'global_target_blocks' => [
-        'reviews' => ['statistics_block'],
-    ],
-
-    /*
-     | Globals that always invalidate explicit URLs.
-     | Format: 'global_handle' => ['/url', ...]
-     */
-    'global_urls' => [
-        'settings' => ['/'],
-    ],
-
-    /*
-     | Rules for collection entries.
-     |
-     | Use 'all' to invalidate every cached URL when any entry in the
-     | collection is saved.
-     |
-     | Rule without field: invalidate every page containing this block type.
-     | Rule with field:    invalidate pages where the field references this entry.
-     |
-     | Format: 'collection_handle' => [['block' => 'type', 'field' => 'handle'], ...]
-     */
-    'collection_entry_rules' => [
-        'reusable_blocks' => [
-            ['block' => 'reusable_block', 'field' => 'entry'],
-        ],
-        'projects' => [
-            ['block' => 'project_grid', 'field' => 'projects'],
-        ],
-        'articles' => [
-            ['block' => 'article_carousel_block'],
-        ],
-    ],
-
-    /*
-     | Collections that always invalidate explicit URLs (e.g. overview pages).
-     | Format: 'collection_handle' => ['/url', ...]
-     */
-    'collection_urls' => [
-        'articles' => ['/blog'],
-    ],
-
-    /*
-     | Taxonomies that invalidate pages containing specific block types.
-     | Format: 'taxonomy_handle' => ['block_type', ...]
-     */
-    'taxonomy_target_blocks' => [
-        'tags' => ['article_overview_block'],
-    ],
-
-    /*
-     | Taxonomies that always invalidate explicit URLs.
-     | Format: 'taxonomy_handle' => ['/url', ...]
-     */
-    'taxonomy_urls' => [
-        'tags' => ['/blog'],
-    ],
-
-];
+],
 ```
+
+The two `block` rules resolve through the block index, so they only reach what a pagebuilder block renders. `parent` and `collection` rules do not use the index, and are inert unless configured.
 
 ---
 
 ## How it works
 
-When any content is saved, the addon resolves which cached URLs to clear:
+On save, the addon resolves which cached URLs to clear:
 
 | Trigger | Behaviour |
 |---------|-----------|
-| Global in `globals_flush_all` | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
-| Nav in `navs_flush_all` | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
-| Form blueprint save (when `forms_flush_all`) | Full flush via `StaticCache::flush()` (pages, nocache regions, shared errors) + clear block index |
-| Global with `global_target_blocks` rule | Invalidate pages containing those block types |
-| Global with `global_urls` rule | Invalidate the configured URLs |
-| Entry in `collection_entry_rules` — `'all'` | Invalidate every currently-cached URL |
-| Entry in `collection_entry_rules` — block rules | Invalidate pages that match via the block index |
-| Entry in `collection_urls` | Invalidate the configured URLs |
-| Entry — own URL | Always included |
-| Taxonomy term | Same pattern as globals (block targets + explicit URLs) |
+| Global in `globals_flush_all` | Full flush + clear block index |
+| Nav in `navs_flush_all` | Full flush + clear block index |
+| Form blueprint saved, when `forms_flush_all` | Full flush + clear block index |
+| Collection tree saved | Clear block index; full flush if the collection is in `collection_trees_flush_all` |
+| Global or taxonomy term | Pages matching `*_target_blocks`, plus `*_urls` |
+| Entry in a collection mapped to `'all'` | Every currently-cached URL |
+| Entry matching `collection_entry_rules` | Block-index matches, parent page, referencing entries |
+| Entry — always | Its own URL, `collection_urls`, and `customEntryUrls()` |
+
+A **full flush** goes through `StaticCache::flush()`, the same path as `php artisan statamic:static:clear`: cached pages, `nocache` regions and cached error pages such as a shared 404. Flushing the cacher alone would leave nocache regions behind to be restored into freshly rendered pages.
 
 ### Block index
 
-The addon maintains a `url → blocks[]` index in your Laravel cache. Each block is stored as a slim record containing only its `type` and the fields referenced in your rules — rich text, images, and other large field values are discarded at build time to keep the index small.
+The addon maintains a `url → blocks[]` index in your Laravel cache. Each block is stored as a slim record containing only its `type` and the fields your rules reference — rich text, images and other large values are discarded at build time.
 
 The index is built on first access and stored forever. It is cleared when:
 
-- The full cache is flushed (global/nav flush-all or form blueprint save).
-- Any entry in `pagebuilder_collections` is saved (page layout may have changed).
-- Any entry whose collection has a `reusable_block` rule is saved (embedded content may have changed).
+- The full cache is flushed.
+- Any collection tree is saved — a move changes the URLs the index is keyed on, and a reorder dispatches no move event at all.
+- An entry is saved in a `pagebuilder_collections` collection (page layout may have changed), or in one with a `reusable_block` rule (embedded content may have changed).
+
+Its cache key is fingerprinted with `collection_entry_rules` and `pagebuilder_collections`, so editing either config takes effect immediately instead of matching nothing against an index built under the old rules.
 
 ### Reusable blocks
 
-Blocks of type `reusable_block` are expanded inline when the index is built, so pages that embed a reusable block are correctly invalidated when that block entry is updated.
-
-Circular references are detected and skipped.
+Blocks of type `reusable_block` are expanded inline when the index is built, so pages embedding one are invalidated when that entry changes. Circular references are detected and skipped.
 
 ### Extending
 
-Override `customEntryUrls()` in a site-specific subclass for collections that cannot be expressed with config-driven rules:
+Most template-rendered relations are covered by the `parent` and `collection` rules above. For anything they cannot express, override `customEntryUrls()` — it is merged for every entry, whether or not its collection has rules:
 
 ```php
 class SiteInvalidator extends \RoxDigital\CacheInvalidation\ContentDependencyInvalidator
 {
     protected function customEntryUrls(\Statamic\Entries\Entry $entry): \Illuminate\Support\Collection
     {
-        if ($entry->collectionHandle() === 'team') {
-            return collect(['/about']);
-        }
-
-        return collect();
+        return $entry->collectionHandle() === 'team' ? collect(['/about']) : collect();
     }
 }
 ```
 
-Register your subclass in `config/statamic/static_caching.php`:
+Point the config at your subclass; the addon registers its `$rules` binding for whichever class is configured:
 
 ```php
 'invalidation' => [
@@ -237,6 +182,8 @@ Register your subclass in `config/statamic/static_caching.php`:
     'rules' => [],
 ],
 ```
+
+`urlsFor()`, `urlsForGlobal()`, `urlsForEntry()` and `urlsForTaxonomyTerm()` are `protected` if you need to go further.
 
 ---
 
@@ -256,9 +203,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 Released under the [MIT License](LICENSE). Copyright © 2026 Rox Digital.
 
-You are free to use, modify and distribute this addon, including commercially,
-provided the copyright notice and licence text are kept intact. It is provided
-**as is**, without warranty of any kind — Rox Digital accepts no liability for
-any claim or damages arising from its use. Cache invalidation affects what your
-visitors see: verify the behaviour against your own site and caching strategy
-before relying on it in production.
+Free to use, modify and distribute, including commercially, provided the copyright
+notice is kept intact. Provided **as is**, without warranty of any kind — Rox Digital
+accepts no liability. Invalidation decides what your visitors see: verify it against
+your own site and caching strategy before relying on it in production.
