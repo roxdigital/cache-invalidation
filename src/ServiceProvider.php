@@ -18,10 +18,18 @@ use RoxDigital\CacheInvalidation\Graph\NullGraph;
 use RoxDigital\CacheInvalidation\Graph\SqliteGraph;
 use RoxDigital\CacheInvalidation\Http\AddCacheTagsHeader;
 use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
+use RoxDigital\CacheInvalidation\Recording\TrackingEntryQueryBuilder;
+use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
+use Statamic\Contracts\Entries\QueryBuilder as EntryQueryBuilderContract;
+use Statamic\Contracts\Taxonomies\TermRepository as TermRepositoryContract;
 use Statamic\Events\BlueprintSaved;
 use Statamic\Events\CollectionTreeSaved;
 use Statamic\Facades\StaticCache;
 use Statamic\Providers\AddonServiceProvider;
+use Statamic\Stache\Query\EntryQueryBuilder;
+use Statamic\Stache\Stache;
+use Statamic\Stache\Stores\Store;
+use Statamic\Statamic;
 use Statamic\StaticCaching\Cachers\Writer;
 use Statamic\StaticCaching\StaticCacheManager;
 
@@ -72,6 +80,30 @@ class ServiceProvider extends AddonServiceProvider
         if ($this->graphDriver() === 'database') {
             $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
         }
+
+        $this->registerReadRecorders();
+    }
+
+    /**
+     * Deliberately in boot rather than register: Statamic's Stache provider binds
+     * EntryQueryBuilder unconditionally in its own register(), so a binding made
+     * during register() would be clobbered if our provider happened to run first.
+     * Boot runs after every register(), and nothing resolves a query builder
+     * before a request or command is handled.
+     */
+    private function registerReadRecorders(): void
+    {
+        $recorder = fn (): DependencyRecorder => $this->app->make(DependencyRecorder::class);
+        $entries = fn (): Store => $this->app->make(Stache::class)->store('entries');
+
+        $builder = fn (): TrackingEntryQueryBuilder => new TrackingEntryQueryBuilder($entries(), $recorder());
+
+        // EntryRepository::query() resolves the contract; the concrete is bound
+        // too, in case anything resolves it directly.
+        $this->app->bind(EntryQueryBuilderContract::class, $builder);
+        $this->app->bind(EntryQueryBuilder::class, $builder);
+
+        Statamic::repository(TermRepositoryContract::class, TrackingTermRepository::class);
     }
 
     /**
