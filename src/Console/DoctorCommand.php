@@ -22,6 +22,25 @@ final class DoctorCommand extends Command
 
     protected $description = 'Verify that cache invalidation can actually work on this environment';
 
+    /**
+     * Rule keys from v1. Ignored now that dependencies are observed rather than
+     * declared, but silently ignoring them would leave a site believing its rules
+     * still mean something.
+     */
+    private const OBSOLETE_KEYS = [
+        'pagebuilder_collections',
+        'globals_flush_all',
+        'navs_flush_all',
+        'collection_trees_flush_all',
+        'forms_flush_all',
+        'global_target_blocks',
+        'global_urls',
+        'collection_entry_rules',
+        'collection_urls',
+        'taxonomy_target_blocks',
+        'taxonomy_urls',
+    ];
+
     public function handle(DependencyGraph $graph, CachedUrls $cached, Cacher $cacher): int
     {
         $failed = false;
@@ -80,7 +99,24 @@ final class DoctorCommand extends Command
             }
         }
 
+        $this->check(
+            'Invalidator',
+            class_basename((string) config('statamic.static_caching.invalidation.class')),
+            true,
+        );
+
         $this->line('');
+
+        if ($obsolete = array_values(array_filter(
+            self::OBSOLETE_KEYS,
+            fn (string $key): bool => config()->has("cache_invalidation.{$key}"),
+        ))) {
+            $this->components->warn(
+                'config/cache_invalidation.php still declares v1 rule keys, which are ignored. '
+                . 'Safe to delete: ' . implode(', ', $obsolete)
+            );
+            $this->line('');
+        }
 
         if ($failed) {
             $this->components->error('Cache invalidation cannot work on this environment.');

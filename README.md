@@ -1,8 +1,10 @@
 # Cache Invalidation
 
-Targeted static and half-measure cache invalidation for Statamic sites built with a pagebuilder.
+Targeted static cache invalidation for Statamic, with no configuration.
 
-Instead of flushing the entire cache on every save, this addon builds a block-index of your pages and invalidates only the URLs that reference the changed content — by entry, global, navigation, or taxonomy term.
+Pages record what they read while they render. Saving content clears exactly the
+cached pages that read it — no block index, no rule lists, nothing to keep in sync
+when you add a pagebuilder block.
 
 [![Latest Release](https://img.shields.io/github/v/release/roxdigital/cache-invalidation)](https://github.com/roxdigital/cache-invalidation/releases)
 [![PHP](https://img.shields.io/badge/PHP-8.4%2B-blue)](https://www.php.net)
@@ -17,11 +19,11 @@ Instead of flushing the entire cache on every save, this addon builds a block-in
 | Laravel | `^12.0 \|\| ^13.0` |
 | Statamic | `^6.0` |
 
+Works with both the `half` and `full` static caching strategies.
+
 ---
 
 ## Installation
-
-### 1. Add the repository
 
 Add the GitHub VCS source to your project's `composer.json`:
 
@@ -36,162 +38,208 @@ Add the GitHub VCS source to your project's `composer.json`:
 }
 ```
 
-### 2. Require and publish
-
 ```bash
 composer require roxdigital/cache-invalidation
-php artisan vendor:publish --tag=cache-invalidation-config
 ```
 
-### 3. Configure Statamic
+That's the whole installation. There is nothing to publish, no migration to run,
+and no configuration to write. The addon registers itself as Statamic's
+invalidator and creates its own storage on first use.
 
-Nothing to do in most cases: the addon registers itself as the invalidator when `statamic.static_caching.invalidation.class` is unset, which is Statamic's default. Set it explicitly only to point at your own subclass:
-
-```php
-'invalidation' => [
-    'class' => \App\StaticCaching\SiteInvalidator::class,
-    'rules' => [],
-],
-```
-
-> **Note:** This addon replaces Statamic's rule-based invalidator. Keep `rules` as an empty array.
-
----
-
-## Local development
-
-Use a Composer path repository to work against a local clone:
-
-```json
-{
-    "repositories": [
-        {
-            "type": "path",
-            "url": "addons/roxdigital/cache-invalidation"
-        }
-    ]
-}
-```
+Verify with:
 
 ```bash
-composer require roxdigital/cache-invalidation:@dev
+php artisan cache-invalidation:doctor
 ```
-
----
-
-## Configuration
-
-`config/cache_invalidation.php` documents every key inline. In short:
-
-| Key | Effect |
-|-----|--------|
-| `pagebuilder_collections` | Collections with a pagebuilder field. Only these are indexed. |
-| `globals_flush_all` | Global handles that flush the whole cache on save. |
-| `navs_flush_all` | Nav handles that flush the whole cache — structure edits and reorders. |
-| `collection_trees_flush_all` | Collections whose tree order drives shared output (a nav or breadcrumbs built from the page tree). Empty by default. |
-| `forms_flush_all` | `true` by default: a form blueprint save flushes the whole cache, since the changed fields render on every page embedding the form. |
-| `global_target_blocks` | `'global' => ['block_type', ...]` — invalidate pages containing those blocks. |
-| `global_urls` | `'global' => ['/url', ...]` |
-| `collection_entry_rules` | Per-collection entry rules — see below. |
-| `collection_urls` | `'collection' => ['/url', ...]` |
-| `taxonomy_target_blocks` | `'taxonomy' => ['block_type', ...]` |
-| `taxonomy_urls` | `'taxonomy' => ['/url', ...]` |
-
-### Entry rules
-
-Map a collection to `'all'` — invalidate every cached URL on any save — or to a list of rules:
-
-```php
-'collection_entry_rules' => [
-
-    // Pages containing this block type.
-    'articles' => [['block' => 'article_carousel']],
-
-    // Pages where that block's field references the saved entry.
-    'reusable_blocks' => [['block' => 'reusable_block', 'field' => 'entry']],
-
-    // The saved entry's parent page, for a structured collection whose parent
-    // template lists its children. Opt-in per collection: in a collection
-    // mounted at the site root, a top-level entry's parent is the root itself.
-    'vacancies' => [['parent' => true]],
-
-    // Entries in another collection whose field references the saved entry —
-    // the inverse of a block rule, for relations rendered by a template (an
-    // article showing its author). Walks that collection on every save.
-    'employees' => [['collection' => 'articles', 'field' => 'author']],
-
-],
-```
-
-The two `block` rules resolve through the block index, so they only reach what a pagebuilder block renders. `parent` and `collection` rules do not use the index, and are inert unless configured.
 
 ---
 
 ## How it works
 
-On save, the addon resolves which cached URLs to clear:
+### Dependencies are observed, not declared
 
-| Trigger | Behaviour |
-|---------|-----------|
-| Global in `globals_flush_all` | Full flush + clear block index |
-| Nav in `navs_flush_all` | Full flush + clear block index |
-| Form blueprint saved, when `forms_flush_all` | Full flush + clear block index |
-| Collection tree saved | Clear block index; full flush if the collection is in `collection_trees_flush_all` |
-| Global or taxonomy term | Pages matching `*_target_blocks`, plus `*_urls` |
-| Entry in a collection mapped to `'all'` | Every currently-cached URL |
-| Entry matching `collection_entry_rules` | Block-index matches, parent page, referencing entries |
-| Entry — always | Its own URL, `collection_urls`, and `customEntryUrls()` |
+While a page renders, the addon watches what it reads and records a set of tags
+against the page's URL when it enters the static cache:
 
-A **full flush** goes through `StaticCache::flush()`, the same path as `php artisan statamic:static:clear`: cached pages, `nocache` regions and cached error pages such as a shared 404. Flushing the cacher alone would leave nocache regions behind to be restored into freshly rendered pages.
-
-### Block index
-
-The addon maintains a `url → blocks[]` index in your Laravel cache. Each block is stored as a slim record containing only its `type` and the fields your rules reference — rich text, images and other large values are discarded at build time.
-
-The index is built on first access and stored forever. It is cleared when:
-
-- The full cache is flushed.
-- Any collection tree is saved — a move changes the URLs the index is keyed on, and a reorder dispatches no move event at all.
-- An entry is saved in a `pagebuilder_collections` collection (page layout may have changed), or in one with a `reusable_block` rule (embedded content may have changed).
-
-Its cache key is fingerprinted with `collection_entry_rules` and `pagebuilder_collections`, so editing either config takes effect immediately instead of matching nothing against an index built under the old rules.
-
-### Reusable blocks
-
-Blocks of type `reusable_block` are expanded inline when the index is built, so pages embedding one are invalidated when that entry changes. Circular references are detected and skipped.
-
-### Extending
-
-Most template-rendered relations are covered by the `parent` and `collection` rules above. For anything they cannot express, override `customEntryUrls()` — it is merged for every entry, whether or not its collection has rules:
-
-```php
-class SiteInvalidator extends \RoxDigital\CacheInvalidation\ContentDependencyInvalidator
-{
-    protected function customEntryUrls(\Statamic\Entries\Entry $entry): \Illuminate\Support\Collection
-    {
-        return $entry->collectionHandle() === 'team' ? collect(['/about']) : collect();
-    }
-}
+```
+https://site.test/over-ons
+  entry:9f2c…            an entry it rendered
+  collection:articles    a query it ran against a collection
+  term:departments::sales
+  taxonomy:departments
+  global:footer
+  form:contact
 ```
 
-Point the config at your subclass; the addon registers its `$rules` binding for whichever class is configured:
+On save, the changed item is turned into the same tags, and every URL carrying one
+of them is cleared. Because the template is the only thing that decides what a
+page reads, there is no second copy of that knowledge to drift out of date.
 
-```php
-'invalidation' => [
-    'class' => \App\StaticCaching\SiteInvalidator::class,
-    'rules' => [],
-],
-```
+### Item tags and list tags
 
-`urlsFor()`, `urlsForGlobal()`, `urlsForEntry()` and `urlsForTaxonomyTerm()` are `protected` if you need to go further.
+The distinction that makes this targeted rather than blunt:
+
+- A query pinned to ids — `Entry::find($id)`, an `entries` field being augmented —
+  records **item tags** only. A reusable block embedded on three pages clears only
+  those three.
+- Any other query also records a **list tag** for its scope. A carousel showing
+  "the latest three articles" has never seen an article created tomorrow, so its
+  id can be in no tag set; the `collection:articles` tag is what clears it.
+
+A block that picks between those modes at runtime — automatic, by author, manual —
+gets the right answer for whichever branch actually ran.
+
+### Where reads are observed
+
+| Content | Hook |
+|---|---|
+| Entries | `EntryQueryBuilder::getFilteredKeys()` and `getItems()` |
+| Terms | `TermQueryBuilder`, via a replaced `TermRepository::query()` |
+| Globals | `Variables::newAugmentedInstance()`, recorded on first value read |
+| Forms | `FormRepository::find()`, which is how the form fieldtype augments |
+
+Globals are recorded lazily, on read. Statamic hydrates every global set into
+every view whether a template uses it or not, so a set rendered in your layout
+ends up on every page while a set rendered by one block ends up only on that
+block's pages.
+
+### What happens on save
+
+| Saved | Cleared |
+|---|---|
+| Entry | Its own URL and descendants, pages carrying `entry:{id}`, pages carrying `collection:{handle}` |
+| Term | Pages carrying `term:{taxonomy}::{slug}` or `taxonomy:{handle}` |
+| Global set | Pages that read it — which is every page, if it is read in your layout |
+| Form, or a forms blueprint | Pages that render that form |
+| Collection tree | Pages carrying that collection's list tag, plus the URLs Statamic reports as moved |
+| Navigation | Every cached URL |
+| Anything | Plus any cached URL with no recorded dependencies (see below) |
+
+The cache is never flushed wholesale — URLs are invalidated individually, so
+`nocache` regions and the graph survive and pages come back without a global
+re-render.
+
+A navigation save is the one deliberate exception, per the shape of the problem: a
+reorder or relabel changes links rendered in shared layout, and no per-page
+dependency can express that.
+
+### The safety net
+
+Any URL that is cached but absent from the graph is treated as depending on
+everything, and cleared by the next save of anything. This covers pages cached
+before the addon was installed, a lost graph, and any bug in the recorders — the
+failure mode is over-invalidation that heals after one render, rather than a page
+that stays stale with no symptom.
+
+`cache-invalidation:stats` reports how many such URLs exist. Right after a deploy
+or a flush that number is everything; it drops to zero as pages are rendered.
 
 ---
 
-## Performance
+## Commands
 
-- **Use a queue driver in production.** Statamic dispatches invalidation jobs to the queue. Without a queue driver, invalidation runs synchronously inside the CP save request.
-- **Use Redis (or another fast cache driver).** The block index is stored as a single serialised entry. A fast driver reduces index rebuild time.
-- The index is built once per cache miss. Subsequent invalidations reuse the cached index with no database queries.
+```bash
+# What does this page depend on?
+php artisan cache-invalidation:why https://site.test/over-ons
+
+# What would clear if I saved this? Accepts an entry id, term id,
+# global set handle, form handle, or a raw tag.
+php artisan cache-invalidation:affected 9f2c1b4e-…
+php artisan cache-invalidation:affected collection:articles
+
+# Graph size and coverage of the static cache.
+php artisan cache-invalidation:stats
+
+# Deploy check. Exits non-zero when invalidation cannot work.
+php artisan cache-invalidation:doctor
+```
+
+Set `CACHE_INVALIDATION_DEBUG=true` to add an `X-Cache-Tags` header to responses
+as they are cached, so a page's dependencies are readable in devtools.
+
+---
+
+## Configuration
+
+There is nothing you need to set. The file exists for two choices:
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `driver` | `sqlite` | Where the graph lives — `sqlite`, `database` or `null` |
+| `sqlite_path` | `storage/statamic/cache-invalidation.sqlite` | |
+| `database_connection` | `null` | Connection for the `database` driver |
+| `debug` | `false` | `X-Cache-Tags` header |
+
+```bash
+php artisan vendor:publish --tag=cache-invalidation-config
+```
+
+**`sqlite`** owns its own connection and creates the file and schema on first
+write, so it works on a site with no `DB_CONNECTION` configured — the common
+Statamic case. It sits beside Statamic's own static cache bookkeeping so the graph
+and the cache share a directory and a deploy that discards one discards both.
+
+**`database`** keeps the graph in your application database instead. Requires
+`php artisan migrate`.
+
+**`null`** records nothing, which makes every cached URL untracked and therefore
+clears the whole cache on every save. A conservative fallback, not a production
+driver.
+
+> The graph must be visible to every process that renders or invalidates pages. On
+> a single server that is automatic. If web and queue run on separate machines with
+> separate filesystems, use the `database` driver — and note that a file-backed
+> static cache would already be inconsistent in that setup.
+
+---
+
+## Escape hatch
+
+One directive, for the only thing observation cannot see: a dependency a template
+reacts to without reading.
+
+```blade
+{{-- A "we're hiring" banner that queries no vacancies --}}
+@cachetags('collection:vacancies')
+```
+
+Everything a template actually reads is recorded on its own. This is for the
+exception.
+
+---
+
+## Upgrading from 1.x
+
+Remove the rule keys from `config/cache_invalidation.php` — all of
+`pagebuilder_collections`, `collection_entry_rules`, `collection_urls`,
+`globals_flush_all`, `navs_flush_all`, `collection_trees_flush_all`,
+`forms_flush_all`, `global_target_blocks`, `global_urls`,
+`taxonomy_target_blocks` and `taxonomy_urls` are gone. `cache-invalidation:doctor`
+lists any that are still present.
+
+If `statamic.static_caching.invalidation.class` points at
+`ContentDependencyInvalidator`, you can leave it — the addon recognises its own
+class names and upgrades the pin. A subclass of your own is still respected, but
+`customEntryUrls()` no longer exists; the relations it existed for are now
+observed automatically.
+
+After deploying, expect one round of broad invalidation while pages are rendered
+and the graph fills. `cache-invalidation:stats` shows the progress.
+
+---
+
+## Notes
+
+- **Assets are not tracked.** Saving an asset clears nothing extra, matching 1.x.
+- **Cold pages record nothing**, which is correct — there is nothing cached to
+  clear. On full measure, run `statamic:static:warm` after a deploy so the graph
+  fills promptly rather than lazily.
+- **Recording only happens on a cache miss**, during a render you are already
+  paying for. Invalidation is one indexed lookup plus the deletes; nothing walks
+  content, which matters when a single queue worker handles the job — or when
+  `QUEUE_CONNECTION=sync` runs it inside the editor's save request.
+- **A page with more than 2,000 dependencies** collapses to a single overflow tag
+  and is treated as depending on everything.
 
 ---
 

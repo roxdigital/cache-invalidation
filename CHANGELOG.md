@@ -4,12 +4,78 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-06
+
+Invalidation is now derived from what pages actually read, instead of from rules
+describing what they might read. There is no configuration to write.
+
+The 1.x design kept a hand-maintained map of block types and field handles that
+had to mirror the templates. It drifted silently — a URL that no longer resolved
+invalidated nothing, and a relation rendered outside the `pagebuilder` field was
+invisible to the block index by construction. The template already knows what it
+renders; v2 observes it rather than restating it.
+
+### Added
+
+- A `url -> tags` dependency graph, recorded while a page renders and written when
+  it enters the static cache. Works identically on the `half` and `full`
+  strategies.
+- Read recording for entries, terms, globals and forms, hooked at the query
+  builder, repository and augmentation level rather than in templates.
+- Item tags versus list tags: a query pinned to ids records only those items, while
+  any other query also records its collection or taxonomy, so an entry created
+  later still invalidates listings that have never seen it.
+- Storage drivers: `sqlite` (default, owns its own connection and schema, needs no
+  database configured), `database` (opt-in, with a migration), and `null` (records
+  nothing, so every save clears everything).
+- A safety net: any cached URL absent from the graph is treated as depending on
+  everything. Covers pages cached before install, a lost graph, and recorder bugs,
+  so the failure mode is over-invalidation that heals after one render rather than
+  a page that stays stale with no symptom.
+- `cache-invalidation:why`, `:affected`, `:stats` and `:doctor`. `affected` answers
+  "what clears if I save this?" before saving — the question the 1.x design could
+  not be asked. `doctor` exits non-zero when invalidation cannot work, so a broken
+  environment fails a deploy.
+- An `X-Cache-Tags` header behind `CACHE_INVALIDATION_DEBUG`.
+- `@cachetags(...)` for the one case observation cannot cover: a dependency a
+  template reacts to without reading, such as a banner conditional on any vacancy
+  existing.
+
 ### Changed
 
-- Relicensed from proprietary to the MIT License. Copyright remains with Rox
-  Digital and the notice must be retained in redistributions, while the licence
-  disclaims all warranty and liability. `composer.json` now declares `MIT` and a
-  `LICENSE` file has been added.
+- The whole cache is no longer flushed for globals, navigations, form blueprints or
+  collection trees. URLs are invalidated individually, so `nocache` regions and the
+  graph survive. A navigation save still clears every cached URL — a reorder
+  changes links in shared layout and no per-page dependency can express that — but
+  it clears rather than flushes.
+- Globals invalidate only where they are read. A set rendered in the layout still
+  reaches every page; one rendered by a single block reaches that block's pages.
+- Form blueprint saves clear the pages rendering that form instead of the entire
+  site.
+- The addon now claims Statamic's invalidator when the configured class is one of
+  its own, not only when the config is null. Sites pin it by name, and a 1.x pin
+  would otherwise fatal on a class that no longer exists.
+
+### Fixed
+
+- `Invalidator::refresh()` is honoured. `DefaultInvalidator` flips its `$refreshing`
+  flag before delegating to `invalidate()`, which 1.x overrode without checking, so
+  `statamic.static_caching.background_recache` hard-purged instead of refreshing.
+- Relations rendered outside the `pagebuilder` field — an entry's `author`,
+  `category`, a hero fieldset, entry links inside Bard — now invalidate. The 1.x
+  block index only read `$entry->get('pagebuilder')`, and the
+  `['collection' => …, 'field' => …]` rule existed to patch that hole by walking a
+  whole collection on every save.
+
+### Removed
+
+- Every rule key: `pagebuilder_collections`, `collection_entry_rules`,
+  `collection_urls`, `globals_flush_all`, `navs_flush_all`,
+  `collection_trees_flush_all`, `forms_flush_all`, `global_target_blocks`,
+  `global_urls`, `taxonomy_target_blocks`, `taxonomy_urls`.
+  `cache-invalidation:doctor` reports any still present in a published config.
+- The block index and its supporting classes, along with `customEntryUrls()`. The
+  relations that hook existed for are now observed.
 
 ## [1.2.0] - 2026-07-29
 

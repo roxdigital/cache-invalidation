@@ -6,7 +6,9 @@ namespace RoxDigital\CacheInvalidation;
 
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use RoxDigital\CacheInvalidation\Blade\CacheTagsDirective;
 use RoxDigital\CacheInvalidation\Cachers\TrackingApplicationCacher;
 use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
 use RoxDigital\CacheInvalidation\Console\AffectedCommand;
@@ -29,8 +31,6 @@ use Statamic\Contracts\Entries\QueryBuilder as EntryQueryBuilderContract;
 use Statamic\Contracts\Forms\FormRepository as FormRepositoryContract;
 use Statamic\Contracts\Globals\Variables as VariablesContract;
 use Statamic\Contracts\Taxonomies\TermRepository as TermRepositoryContract;
-use Statamic\Events\BlueprintSaved;
-use Statamic\Events\CollectionTreeSaved;
 use Statamic\Events\StaticCacheCleared;
 use Statamic\Facades\StaticCache;
 use Statamic\Providers\AddonServiceProvider;
@@ -59,12 +59,6 @@ class ServiceProvider extends AddonServiceProvider
     ];
 
     protected $listen = [
-        BlueprintSaved::class => [
-            FlushStaticCacheOnFormBlueprintSaved::class,
-        ],
-        CollectionTreeSaved::class => [
-            HandleCollectionTreeSaved::class,
-        ],
         StaticCacheCleared::class => [
             ClearGraphWhenCacheCleared::class,
         ],
@@ -94,43 +88,8 @@ class ServiceProvider extends AddonServiceProvider
         }
 
         $this->registerReadRecorders();
-    }
 
-    private function usesGraphInvalidation(): bool
-    {
-        return (bool) $this->app['config']->get('cache_invalidation.graph', false);
-    }
-
-    private function isOwnInvalidator(string $class): bool
-    {
-        return str_starts_with($class, __NAMESPACE__ . '\\');
-    }
-
-    /**
-     * Deliberately in boot rather than register: Statamic's Stache provider binds
-     * EntryQueryBuilder unconditionally in its own register(), so a binding made
-     * during register() would be clobbered if our provider happened to run first.
-     * Boot runs after every register(), and nothing resolves a query builder
-     * before a request or command is handled.
-     */
-    private function registerReadRecorders(): void
-    {
-        $recorder = fn (): DependencyRecorder => $this->app->make(DependencyRecorder::class);
-        $entries = fn (): Store => $this->app->make(Stache::class)->store('entries');
-
-        $builder = fn (): TrackingEntryQueryBuilder => new TrackingEntryQueryBuilder($entries(), $recorder());
-
-        // EntryRepository::query() resolves the contract; the concrete is bound
-        // too, in case anything resolves it directly.
-        $this->app->bind(EntryQueryBuilderContract::class, $builder);
-        $this->app->bind(EntryQueryBuilder::class, $builder);
-
-        Statamic::repository(TermRepositoryContract::class, TrackingTermRepository::class);
-
-        // The global variables store builds its items with app(Variables::class).
-        $this->app->bind(VariablesContract::class, TrackingVariables::class);
-
-        Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
+        Blade::directive('cachetags', CacheTagsDirective::compile(...));
     }
 
     /**
@@ -209,30 +168,25 @@ class ServiceProvider extends AddonServiceProvider
     /**
      * Claims the invalidator unless the host app points at a class of its own.
      *
-     * The "of its own" test matters on upgrade: a site that pinned one of this
-     * addon's classes by name — sites do, and meerdervoort pins v1's
-     * ContentDependencyInvalidator — must follow the addon forward instead of
-     * silently keeping the previous behaviour while its config says otherwise. A
-     * genuinely foreign subclass is still respected.
+     * The "of its own" test matters on upgrade: sites pin this by name, and a v1
+     * site pinning ContentDependencyInvalidator must follow the addon forward
+     * rather than fataling on a class that no longer exists. A genuinely foreign
+     * subclass is still respected.
      */
     private function registerInvalidator(): void
     {
         $configured = $this->app['config']->get('statamic.static_caching.invalidation.class');
 
         if ($configured === null || $this->isOwnInvalidator((string) $configured)) {
-            $this->app['config']->set(
-                'statamic.static_caching.invalidation.class',
-                $this->usesGraphInvalidation() ? GraphInvalidator::class : ContentDependencyInvalidator::class,
-            );
+            $this->app['config']->set('statamic.static_caching.invalidation.class', GraphInvalidator::class);
         }
 
         /*
          * Contextual bindings are keyed on the exact concrete, so binding only
-         * this class leaves a host app that points the config at a subclass with
-         * an unresolvable $rules parameter. Bind the configured class too.
+         * our own class leaves a host app that points the config at a subclass
+         * with an unresolvable $rules parameter. Bind the configured class too.
          */
         $concretes = array_unique(array_filter([
-            ContentDependencyInvalidator::class,
             GraphInvalidator::class,
             $this->app['config']->get('statamic.static_caching.invalidation.class'),
         ]));
@@ -243,6 +197,40 @@ class ServiceProvider extends AddonServiceProvider
                 ->needs('$rules')
                 ->giveConfig('statamic.static_caching.invalidation.rules');
         }
+    }
+
+    /**
+     * Deliberately in boot rather than register: Statamic's Stache provider binds
+     * EntryQueryBuilder unconditionally in its own register(), so a binding made
+     * during register() would be clobbered if our provider happened to run first.
+     * Boot runs after every register(), and nothing resolves a query builder,
+     * global set or form before a request or command is handled.
+     */
+    private function registerReadRecorders(): void
+    {
+        $recorder = fn (): DependencyRecorder => $this->app->make(DependencyRecorder::class);
+        $entries = fn (): Store => $this->app->make(Stache::class)->store('entries');
+
+        $builder = fn (): TrackingEntryQueryBuilder => new TrackingEntryQueryBuilder($entries(), $recorder());
+
+        // EntryRepository::query() resolves the contract; the concrete is bound
+        // too, in case anything resolves it directly.
+        $this->app->bind(EntryQueryBuilderContract::class, $builder);
+        $this->app->bind(EntryQueryBuilder::class, $builder);
+
+        // TermRepository::query() constructs its builder directly instead of
+        // resolving it, so the repository itself has to be replaced.
+        Statamic::repository(TermRepositoryContract::class, TrackingTermRepository::class);
+
+        // The global variables store builds its items with app(Variables::class).
+        $this->app->bind(VariablesContract::class, TrackingVariables::class);
+
+        Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
+    }
+
+    private function isOwnInvalidator(string $class): bool
+    {
+        return str_starts_with($class, __NAMESPACE__ . '\\');
     }
 
     private function graphDriver(): string
