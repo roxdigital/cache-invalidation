@@ -12,6 +12,7 @@ use RoxDigital\CacheInvalidation\Blade\CacheTagsDirective;
 use RoxDigital\CacheInvalidation\Cachers\TrackingApplicationCacher;
 use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
 use RoxDigital\CacheInvalidation\Console\AffectedCommand;
+use RoxDigital\CacheInvalidation\Console\ClearCommand;
 use RoxDigital\CacheInvalidation\Console\DoctorCommand;
 use RoxDigital\CacheInvalidation\Console\StatsCommand;
 use RoxDigital\CacheInvalidation\Console\WhyCommand;
@@ -47,6 +48,7 @@ class ServiceProvider extends AddonServiceProvider
 
     protected $commands = [
         AffectedCommand::class,
+        ClearCommand::class,
         DoctorCommand::class,
         StatsCommand::class,
         WhyCommand::class,
@@ -126,6 +128,7 @@ class ServiceProvider extends AddonServiceProvider
     private function registerRecorder(): void
     {
         $this->app->singleton(DependencyRecorder::class);
+        $this->app->singleton(CacheTags::class);
 
         // In PHP-FPM the singleton's lifetime is the request. A queue worker
         // keeps the container alive across jobs, so the tag set has to be cleared

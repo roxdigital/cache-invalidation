@@ -107,6 +107,10 @@ php artisan cache-invalidation:affected collection:articles
 # Graph size and coverage of the static cache.
 php artisan cache-invalidation:stats
 
+# Clear pages carrying a tag. The counterpart to `affected`:
+# preview with that, clear with this.
+php artisan cache-invalidation:clear api:reviews
+
 # Deploy check — exits non-zero when invalidation cannot work.
 php artisan cache-invalidation:doctor
 ```
@@ -138,15 +142,41 @@ whole cache on every save — a conservative fallback, not a production driver.
 > a single server that is automatic; if web and queue run on separate filesystems,
 > use `database`.
 
-## Declaring a dependency by hand
+## Data from outside Statamic
 
-One directive, for the only thing observation cannot see: a dependency a template
-reacts to without reading.
+Entries, terms, globals and forms are observed automatically. Data that reaches a
+template from somewhere else — an HTTP call, a custom Eloquent model, a file — is
+not: nothing sees the read, and nothing knows when it changes. Declare both halves.
+
+Where it is rendered:
 
 ```blade
-{{-- A "we're hiring" banner that queries no vacancies --}}
-@cachetags('collection:vacancies')
+@cachetags('api:reviews')
 ```
+
+Or from PHP, in a ViewModel or component:
+
+```php
+use RoxDigital\CacheInvalidation\Facades\CacheTags;
+
+CacheTags::add('api:reviews');
+```
+
+And wherever that data changes — the job that refetched it, say:
+
+```php
+CacheTags::invalidate('api:reviews');   // returns the number of URLs cleared
+CacheTags::urlsFor('api:reviews');      // preview, without clearing
+```
+
+Tags are arbitrary strings; namespace them (`api:reviews`, not `reviews`) so they
+cannot collide with a built-in. `CacheTags::invalidate()` also works with built-in
+tags, so `CacheTags::invalidate('collection:articles')` clears every page listing
+articles.
+
+Unlike a content save, this does not sweep up cached URLs that are missing from the
+graph. That safety net exists so routine editing can never leave a page stale;
+applying it here would make a targeted call clear everything right after a deploy.
 
 ## Upgrading from 1.x
 
@@ -158,6 +188,43 @@ and upgrades the pin. Your own subclass is still respected, but
 `customEntryUrls()` is gone — the relations it existed for are now observed.
 
 Expect one round of broad invalidation after deploying while the graph fills.
+
+## Local development
+
+To work on the addon against a real site, clone it inside the site and point
+Composer at the clone instead of the VCS source. Path repositories symlink by
+default, so edits in `src/` take effect on the next request with no reinstall.
+
+```bash
+git clone git@github.com:roxdigital/cache-invalidation.git addons/roxdigital/cache-invalidation
+```
+
+```json
+{
+    "repositories": [
+        {
+            "type": "path",
+            "url": "addons/roxdigital/cache-invalidation",
+            "options": { "symlink": true }
+        }
+    ]
+}
+```
+
+```bash
+composer require roxdigital/cache-invalidation:@dev
+```
+
+Adding a class in a new subdirectory needs `composer dump-autoload` if the site was
+installed with an optimised autoloader. Switch back with
+`composer require roxdigital/cache-invalidation:^2.0` once the `path` repository is
+removed.
+
+Run the addon's own suite from its directory:
+
+```bash
+composer install && composer test
+```
 
 ## Good to know
 

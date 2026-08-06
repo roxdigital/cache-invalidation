@@ -4,22 +4,21 @@ declare(strict_types=1);
 
 namespace RoxDigital\CacheInvalidation\Blade;
 
-use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
+use RoxDigital\CacheInvalidation\CacheTags;
 
 /**
- * The escape hatch, for the one thing observation cannot see: a dependency a
- * template reacts to without reading.
+ * Blade sugar over CacheTags::add(), for a dependency this addon cannot observe —
+ * typically data reaching the template from outside Statamic's repositories.
  *
- *     @cachetags('collection:vacancies')
+ *     @cachetags('api:reviews')
  *
- * A banner that only says "we're hiring" runs no vacancy query, so nothing marks
- * the page as depending on vacancies existing. Declaring it here is the exception;
- * everything a template actually reads is recorded on its own.
+ * Pair it with CacheTags::invalidate('api:reviews') wherever that data changes;
+ * nothing else knows when it does.
  */
 final class CacheTagsDirective
 {
     public static function compile(string $expression): string
     {
-        return '<?php app(\\' . DependencyRecorder::class . '::class)->add(' . $expression . '); ?>';
+        return '<?php app(\\' . CacheTags::class . '::class)->add(' . $expression . '); ?>';
     }
 }

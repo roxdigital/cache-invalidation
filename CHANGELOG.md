@@ -37,9 +37,15 @@ renders; v2 observes it rather than restating it.
   not be asked. `doctor` exits non-zero when invalidation cannot work, so a broken
   environment fails a deploy.
 - An `X-Cache-Tags` header behind `CACHE_INVALIDATION_DEBUG`.
-- `@cachetags(...)` for the one case observation cannot cover: a dependency a
-  template reacts to without reading, such as a banner conditional on any vacancy
-  existing.
+- A public API for data this addon cannot observe — an HTTP call, a custom Eloquent
+  model, a file. `CacheTags::add()` (or `@cachetags(...)`) declares the dependency
+  where it is rendered, `CacheTags::invalidate()` clears it wherever that data
+  changes, and `cache-invalidation:clear` does the same from the command line.
+  Unlike a content save this does not sweep up untracked URLs, so a targeted call
+  stays targeted right after a deploy.
+- A test suite: 74 tests over Testbench, asserting recording through real queries
+  against real content and invalidation through real save events. Mutation-checked,
+  and verified to fail against the bugs it covers.
 
 ### Changed
 
