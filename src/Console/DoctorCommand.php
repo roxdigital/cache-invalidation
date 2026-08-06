@@ -55,8 +55,8 @@ final class DoctorCommand extends Command
 
         $this->check('Static caching strategy', (string) config('statamic.static_caching.strategy'), true);
 
-        $driver = (string) config('cache_invalidation.driver');
-        $this->check('Graph driver', $driver, $driver !== '');
+        $driver = (string) (config('cache_invalidation.driver') ?: 'sqlite');
+        $this->check('Graph driver', $driver, true);
 
         if ($graph instanceof NullGraph) {
             $this->components->warn('The null driver records nothing, so every save clears the entire cache.');
@@ -75,7 +75,8 @@ final class DoctorCommand extends Command
             $this->check('pdo_sqlite', $loaded ? 'loaded' : 'missing', $loaded);
             $failed = $failed || ! $loaded;
 
-            $path = (string) config('cache_invalidation.sqlite_path');
+            $path = (string) (config('cache_invalidation.sqlite_path')
+                ?: storage_path('statamic/cache-invalidation.sqlite'));
             $writable = is_writable(is_file($path) ? $path : dirname($path));
             $this->check('Sqlite path writable', $path, $writable);
             $failed = $failed || ! $writable;

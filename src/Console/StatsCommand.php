@@ -24,7 +24,7 @@ final class StatsCommand extends Command
         $orphaned = array_values(array_diff($trackedUrls, $cachedUrls));
 
         $this->line('');
-        $this->components->twoColumnDetail('Driver', (string) config('cache_invalidation.driver'));
+        $this->components->twoColumnDetail('Driver', (string) (config('cache_invalidation.driver') ?: 'sqlite'));
         $this->components->twoColumnDetail('Cached URLs', (string) count($cachedUrls));
         $this->components->twoColumnDetail('Tracked URLs', (string) $stats['urls']);
         $this->components->twoColumnDetail('Distinct tags', (string) $stats['tags']);

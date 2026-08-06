@@ -27,14 +27,30 @@ namespace RoxDigital\CacheInvalidation\Recording;
 trait DetectsItemLookups
 {
     /**
-     * Clause types that pin results to a known set of ids. Notably not NotIn or a
-     * `!=` operator, which exclude ids rather than bounding to them.
+     * Columns that identify specific items rather than describe a set.
+     *
+     * `uri` belongs here even though, strictly, a newly created entry could claim
+     * an existing URI. Statamic resolves every frontend request through
+     * findByUri(), which queries `uri` with no collection scope, so treating it as
+     * a set query made every rendered page depend on every collection — any entry
+     * save anywhere then cleared the entire cache.
+     *
+     * The case it gives up is narrow and already covered elsewhere: an entry that
+     * takes over a URI has that URL in its own absoluteUrl(), which Statamic
+     * invalidates directly. Only a page rendering a *teaser* resolved by someone
+     * else's URI could go stale, and it would recover on its next render.
+     */
+    private const IDENTIFYING_COLUMNS = ['id', 'uri'];
+
+    /**
+     * Clause types that pin results to known items. Notably not NotIn or a `!=`
+     * operator, which exclude items rather than bounding to them.
      */
     private const BOUNDING_TYPES = ['Basic', 'In'];
 
     protected function isItemLookup(): bool
     {
-        // An empty where clause is emphatically not an id lookup: "everything in
+        // An empty where clause is emphatically not an item lookup: "everything in
         // this collection" is the broadest list query there is.
         if (empty($this->wheres)) {
             return false;
@@ -47,7 +63,7 @@ trait DetectsItemLookups
                 return false;
             }
 
-            if ($this->boundsResultsToIds($where)) {
+            if ($this->boundsResults($where)) {
                 $bounded = true;
             }
         }
@@ -58,9 +74,9 @@ trait DetectsItemLookups
     /**
      * @param  array<string, mixed>  $where
      */
-    private function boundsResultsToIds(array $where): bool
+    private function boundsResults(array $where): bool
     {
-        if (($where['column'] ?? null) !== 'id') {
+        if (! in_array($where['column'] ?? null, self::IDENTIFYING_COLUMNS, true)) {
             return false;
         }
 

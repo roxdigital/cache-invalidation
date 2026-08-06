@@ -70,6 +70,7 @@ class ServiceProvider extends AddonServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/cache_invalidation.php', 'cache_invalidation');
 
+        $this->fillMissingConfig();
         $this->registerSqliteConnection();
         $this->registerGraph();
         $this->registerRecorder();
@@ -95,6 +96,31 @@ class ServiceProvider extends AddonServiceProvider
     }
 
     /**
+     * Defaults cannot live only in the config file.
+     *
+     * `php artisan config:cache` makes mergeConfigFrom a no-op, so a site that
+     * followed the install instructions — which say there is nothing to publish —
+     * and then cached its config has no cache_invalidation namespace at all at
+     * runtime. Without this the sqlite path is empty, the graph cannot be opened,
+     * and the queued invalidation job throws: pages stay stale and nothing says so.
+     */
+    private function fillMissingConfig(): void
+    {
+        $defaults = [
+            'driver' => 'sqlite',
+            'sqlite_path' => storage_path('statamic/cache-invalidation.sqlite'),
+            'database_connection' => null,
+            'debug' => false,
+        ];
+
+        foreach ($defaults as $key => $default) {
+            if ($this->app['config']->get("cache_invalidation.{$key}") === null) {
+                $this->app['config']->set("cache_invalidation.{$key}", $default);
+            }
+        }
+    }
+
+    /**
      * A dedicated connection owned by the addon, so the graph works on a site
      * with no DB_CONNECTION configured — which is the common Statamic case.
      */
@@ -102,7 +128,7 @@ class ServiceProvider extends AddonServiceProvider
     {
         $this->app['config']->set('database.connections.' . SqliteGraph::CONNECTION, [
             'driver' => 'sqlite',
-            'database' => $this->app['config']->get('cache_invalidation.sqlite_path'),
+            'database' => $this->sqlitePath(),
             'prefix' => '',
             'foreign_key_constraints' => false,
             'journal_mode' => 'wal',
@@ -118,10 +144,7 @@ class ServiceProvider extends AddonServiceProvider
                 $app['config']->get('cache_invalidation.database_connection'),
             ),
             'null' => new NullGraph,
-            default => new SqliteGraph(
-                $app->make(DatabaseManager::class),
-                (string) $app['config']->get('cache_invalidation.sqlite_path'),
-            ),
+            default => new SqliteGraph($app->make(DatabaseManager::class), $this->sqlitePath()),
         });
     }
 
@@ -251,6 +274,19 @@ class ServiceProvider extends AddonServiceProvider
 
     private function graphDriver(): string
     {
-        return (string) $this->app['config']->get('cache_invalidation.driver', 'sqlite');
+        return (string) ($this->app['config']->get('cache_invalidation.driver') ?: 'sqlite');
+    }
+
+    /**
+     * Resolved rather than read straight from config, so nothing depends on the
+     * config namespace existing at the moment the graph is built.
+     */
+    private function sqlitePath(): string
+    {
+        $path = $this->app['config']->get('cache_invalidation.sqlite_path');
+
+        return is_string($path) && $path !== ''
+            ? $path
+            : storage_path('statamic/cache-invalidation.sqlite');
     }
 }
