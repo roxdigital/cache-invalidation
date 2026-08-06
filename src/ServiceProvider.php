@@ -195,7 +195,10 @@ class ServiceProvider extends AddonServiceProvider
             $this->app
                 ->when($concrete)
                 ->needs('$rules')
-                ->giveConfig('statamic.static_caching.invalidation.rules');
+                // The default matters: a host app whose static_caching config
+                // predates the invalidation.rules key, or sets it to null, would
+                // otherwise resolve the invalidator with null and fatal.
+                ->giveConfig('statamic.static_caching.invalidation.rules', []);
         }
     }
 
@@ -228,9 +231,19 @@ class ServiceProvider extends AddonServiceProvider
         Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
     }
 
+    /**
+     * Invalidator classes this addon has shipped, including removed ones.
+     *
+     * An explicit list rather than a namespace prefix: a prefix would also claim
+     * any other class that happens to live under this namespace, which is broader
+     * than the intent and would silently override something it should not.
+     */
     private function isOwnInvalidator(string $class): bool
     {
-        return str_starts_with($class, __NAMESPACE__ . '\\');
+        return in_array($class, [
+            GraphInvalidator::class,
+            __NAMESPACE__ . '\ContentDependencyInvalidator', // v1, removed in 2.0
+        ], true);
     }
 
     private function graphDriver(): string

@@ -28,12 +28,16 @@ final class GraphInvalidator extends DefaultInvalidator
 {
     public function __construct(
         Cacher $cacher,
-        array $rules,
+        ?array $rules,
         private readonly DependencyGraph $graph,
         private readonly TagResolver $tags,
         private readonly CachedUrls $cached,
     ) {
-        parent::__construct($cacher, $rules);
+        // Nullable because $rules is resolved from config, and a host app whose
+        // static_caching config predates the invalidation.rules key — or sets it
+        // to null outright — would otherwise fatal on a TypeError. The rules
+        // themselves are unused; they exist so DefaultInvalidator stays satisfied.
+        parent::__construct($cacher, $rules ?? []);
     }
 
     public function invalidate($item): void
