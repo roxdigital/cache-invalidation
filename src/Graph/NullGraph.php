@@ -25,6 +25,15 @@ final class NullGraph implements DependencyGraph
 
     public function forget(string $url): void {}
 
+    /**
+     * Everything is untracked, which is what makes this driver behave as "clear
+     * the whole cache on every save".
+     */
+    public function untracked(array $urls): array
+    {
+        return $urls;
+    }
+
     public function urls(): array
     {
         return [];

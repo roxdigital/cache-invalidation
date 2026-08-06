@@ -36,6 +36,20 @@ interface DependencyGraph
     public function forget(string $url): void;
 
     /**
+     * Of the given URLs, those with no recorded dependencies.
+     *
+     * The safety net behind every invalidation: a URL that is cached but absent
+     * from the graph — cached before the addon was installed, or written while
+     * the graph was unreachable — has to be treated as depending on everything,
+     * or it would stay stale forever with no symptom. Bounded by the number of
+     * cached URLs rather than the size of the graph, because it runs on save.
+     *
+     * @param  list<string>  $urls
+     * @return list<string>
+     */
+    public function untracked(array $urls): array;
+
+    /**
      * @return list<string>
      */
     public function urls(): array;

@@ -9,21 +9,29 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use RoxDigital\CacheInvalidation\Cachers\TrackingApplicationCacher;
 use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
+use RoxDigital\CacheInvalidation\Console\AffectedCommand;
 use RoxDigital\CacheInvalidation\Console\DoctorCommand;
 use RoxDigital\CacheInvalidation\Console\StatsCommand;
 use RoxDigital\CacheInvalidation\Console\WhyCommand;
+use RoxDigital\CacheInvalidation\Graph\ClearGraphWhenCacheCleared;
 use RoxDigital\CacheInvalidation\Graph\DatabaseGraph;
 use RoxDigital\CacheInvalidation\Graph\DependencyGraph;
 use RoxDigital\CacheInvalidation\Graph\NullGraph;
 use RoxDigital\CacheInvalidation\Graph\SqliteGraph;
 use RoxDigital\CacheInvalidation\Http\AddCacheTagsHeader;
+use RoxDigital\CacheInvalidation\Invalidation\GraphInvalidator;
 use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
 use RoxDigital\CacheInvalidation\Recording\TrackingEntryQueryBuilder;
+use RoxDigital\CacheInvalidation\Recording\TrackingFormRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingVariables;
 use Statamic\Contracts\Entries\QueryBuilder as EntryQueryBuilderContract;
+use Statamic\Contracts\Forms\FormRepository as FormRepositoryContract;
+use Statamic\Contracts\Globals\Variables as VariablesContract;
 use Statamic\Contracts\Taxonomies\TermRepository as TermRepositoryContract;
 use Statamic\Events\BlueprintSaved;
 use Statamic\Events\CollectionTreeSaved;
+use Statamic\Events\StaticCacheCleared;
 use Statamic\Facades\StaticCache;
 use Statamic\Providers\AddonServiceProvider;
 use Statamic\Stache\Query\EntryQueryBuilder;
@@ -38,6 +46,7 @@ class ServiceProvider extends AddonServiceProvider
     protected $config = false;
 
     protected $commands = [
+        AffectedCommand::class,
         DoctorCommand::class,
         StatsCommand::class,
         WhyCommand::class,
@@ -55,6 +64,9 @@ class ServiceProvider extends AddonServiceProvider
         ],
         CollectionTreeSaved::class => [
             HandleCollectionTreeSaved::class,
+        ],
+        StaticCacheCleared::class => [
+            ClearGraphWhenCacheCleared::class,
         ],
     ];
 
@@ -84,6 +96,16 @@ class ServiceProvider extends AddonServiceProvider
         $this->registerReadRecorders();
     }
 
+    private function usesGraphInvalidation(): bool
+    {
+        return (bool) $this->app['config']->get('cache_invalidation.graph', false);
+    }
+
+    private function isOwnInvalidator(string $class): bool
+    {
+        return str_starts_with($class, __NAMESPACE__ . '\\');
+    }
+
     /**
      * Deliberately in boot rather than register: Statamic's Stache provider binds
      * EntryQueryBuilder unconditionally in its own register(), so a binding made
@@ -104,6 +126,11 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->bind(EntryQueryBuilder::class, $builder);
 
         Statamic::repository(TermRepositoryContract::class, TrackingTermRepository::class);
+
+        // The global variables store builds its items with app(Variables::class).
+        $this->app->bind(VariablesContract::class, TrackingVariables::class);
+
+        Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
     }
 
     /**
@@ -180,16 +207,22 @@ class ServiceProvider extends AddonServiceProvider
     }
 
     /**
-     * Statamic only binds its own invalidator when the config leaves the class
-     * unset, so claiming the default here is enough. A host app pointing at its
-     * own subclass keeps it.
+     * Claims the invalidator unless the host app points at a class of its own.
+     *
+     * The "of its own" test matters on upgrade: a site that pinned one of this
+     * addon's classes by name — sites do, and meerdervoort pins v1's
+     * ContentDependencyInvalidator — must follow the addon forward instead of
+     * silently keeping the previous behaviour while its config says otherwise. A
+     * genuinely foreign subclass is still respected.
      */
     private function registerInvalidator(): void
     {
-        if ($this->app['config']->get('statamic.static_caching.invalidation.class') === null) {
+        $configured = $this->app['config']->get('statamic.static_caching.invalidation.class');
+
+        if ($configured === null || $this->isOwnInvalidator((string) $configured)) {
             $this->app['config']->set(
                 'statamic.static_caching.invalidation.class',
-                ContentDependencyInvalidator::class,
+                $this->usesGraphInvalidation() ? GraphInvalidator::class : ContentDependencyInvalidator::class,
             );
         }
 
@@ -200,6 +233,7 @@ class ServiceProvider extends AddonServiceProvider
          */
         $concretes = array_unique(array_filter([
             ContentDependencyInvalidator::class,
+            GraphInvalidator::class,
             $this->app['config']->get('statamic.static_caching.invalidation.class'),
         ]));
 

@@ -37,6 +37,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Graph-driven invalidation
+    |--------------------------------------------------------------------------
+    |
+    | Resolve what to clear from the recorded graph rather than from the rule
+    | configuration below. Off by default during the transition, so the graph can
+    | be recorded and inspected with `cache-invalidation:stats` and
+    | `cache-invalidation:affected` before it decides anything.
+    |
+    */
+
+    'graph' => env('CACHE_INVALIDATION_GRAPH', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Sqlite driver path
     |--------------------------------------------------------------------------
     |

@@ -76,6 +76,28 @@ abstract class SqlGraph implements DependencyGraph
         $this->query()->where('url_hash', $this->hash($url))->delete();
     }
 
+    public function untracked(array $urls): array
+    {
+        if ($urls === []) {
+            return [];
+        }
+
+        $tracked = [];
+
+        foreach (array_chunk($urls, self::CHUNK) as $chunk) {
+            $hashes = array_map(fn (string $url): string => $this->hash($url), $chunk);
+
+            foreach ($this->query()->whereIn('url_hash', $hashes)->distinct()->pluck('url_hash') as $hash) {
+                $tracked[$hash] = true;
+            }
+        }
+
+        return array_values(array_filter(
+            $urls,
+            fn (string $url): bool => ! isset($tracked[$this->hash($url)]),
+        ));
+    }
+
     public function urls(): array
     {
         return $this->query()->distinct()->orderBy('url')->pluck('url')->all();
