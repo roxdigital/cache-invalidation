@@ -4,13 +4,42 @@ declare(strict_types=1);
 
 namespace RoxDigital\CacheInvalidation;
 
+use Illuminate\Database\DatabaseManager;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Event;
+use RoxDigital\CacheInvalidation\Cachers\TrackingApplicationCacher;
+use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
+use RoxDigital\CacheInvalidation\Console\DoctorCommand;
+use RoxDigital\CacheInvalidation\Console\StatsCommand;
+use RoxDigital\CacheInvalidation\Console\WhyCommand;
+use RoxDigital\CacheInvalidation\Graph\DatabaseGraph;
+use RoxDigital\CacheInvalidation\Graph\DependencyGraph;
+use RoxDigital\CacheInvalidation\Graph\NullGraph;
+use RoxDigital\CacheInvalidation\Graph\SqliteGraph;
+use RoxDigital\CacheInvalidation\Http\AddCacheTagsHeader;
+use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
 use Statamic\Events\BlueprintSaved;
 use Statamic\Events\CollectionTreeSaved;
+use Statamic\Facades\StaticCache;
 use Statamic\Providers\AddonServiceProvider;
+use Statamic\StaticCaching\Cachers\Writer;
+use Statamic\StaticCaching\StaticCacheManager;
 
 class ServiceProvider extends AddonServiceProvider
 {
     protected $config = false;
+
+    protected $commands = [
+        DoctorCommand::class,
+        StatsCommand::class,
+        WhyCommand::class,
+    ];
+
+    protected $middlewareGroups = [
+        'statamic.web' => [
+            AddCacheTagsHeader::class,
+        ],
+    ];
 
     protected $listen = [
         BlueprintSaved::class => [
@@ -25,6 +54,106 @@ class ServiceProvider extends AddonServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/cache_invalidation.php', 'cache_invalidation');
 
+        $this->registerSqliteConnection();
+        $this->registerGraph();
+        $this->registerRecorder();
+        $this->registerTrackingCachers();
+        $this->registerInvalidator();
+    }
+
+    public function bootAddon(): void
+    {
+        $this->publishes([
+            __DIR__ . '/../config/cache_invalidation.php' => config_path('cache_invalidation.php'),
+        ], 'cache-invalidation-config');
+
+        // The default sqlite driver creates its own schema, so only the opt-in
+        // database driver has anything for `php artisan migrate` to find.
+        if ($this->graphDriver() === 'database') {
+            $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        }
+    }
+
+    /**
+     * A dedicated connection owned by the addon, so the graph works on a site
+     * with no DB_CONNECTION configured — which is the common Statamic case.
+     */
+    private function registerSqliteConnection(): void
+    {
+        $this->app['config']->set('database.connections.' . SqliteGraph::CONNECTION, [
+            'driver' => 'sqlite',
+            'database' => $this->app['config']->get('cache_invalidation.sqlite_path'),
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+            'journal_mode' => 'wal',
+            'busy_timeout' => 5000,
+        ]);
+    }
+
+    private function registerGraph(): void
+    {
+        $this->app->singleton(DependencyGraph::class, fn ($app): DependencyGraph => match ($this->graphDriver()) {
+            'database' => new DatabaseGraph(
+                $app->make(DatabaseManager::class),
+                $app['config']->get('cache_invalidation.database_connection'),
+            ),
+            'null' => new NullGraph,
+            default => new SqliteGraph(
+                $app->make(DatabaseManager::class),
+                (string) $app['config']->get('cache_invalidation.sqlite_path'),
+            ),
+        });
+    }
+
+    private function registerRecorder(): void
+    {
+        $this->app->singleton(DependencyRecorder::class);
+
+        // In PHP-FPM the singleton's lifetime is the request. A queue worker
+        // keeps the container alive across jobs, so the tag set has to be cleared
+        // between them or it would grow until it overflowed. (Octane needs the
+        // same treatment via its RequestReceived event.)
+        Event::listen(JobProcessing::class, function (): void {
+            $this->app->make(DependencyRecorder::class)->reset();
+        });
+    }
+
+    /**
+     * Subclasses of the concrete cachers rather than a decorator on the Cacher
+     * binding: Statamic's cache middleware branches on `instanceof
+     * ApplicationCacher`, `FileCacher` and `NullCacher`, and a wrapper would
+     * silently change which responses are cached.
+     *
+     * Registered through afterResolving so the custom creators are in place
+     * before anything calls driver() on the manager.
+     */
+    private function registerTrackingCachers(): void
+    {
+        $this->app->afterResolving(StaticCacheManager::class, function (StaticCacheManager $manager): void {
+            // Statamic's Manager hands custom creators the same fully merged
+            // config its own createXDriver() methods receive — exclusions, query
+            // string handling and locale included — so nothing has to be
+            // reconstructed here.
+            $manager->extend('application', fn ($app, array $config): TrackingApplicationCacher => new TrackingApplicationCacher(
+                StaticCache::cacheStore(),
+                $config,
+            ));
+
+            $manager->extend('file', fn ($app, array $config): TrackingFileCacher => new TrackingFileCacher(
+                new Writer($config['permissions'] ?? []),
+                StaticCache::cacheStore(),
+                $config,
+            ));
+        });
+    }
+
+    /**
+     * Statamic only binds its own invalidator when the config leaves the class
+     * unset, so claiming the default here is enough. A host app pointing at its
+     * own subclass keeps it.
+     */
+    private function registerInvalidator(): void
+    {
         if ($this->app['config']->get('statamic.static_caching.invalidation.class') === null) {
             $this->app['config']->set(
                 'statamic.static_caching.invalidation.class',
@@ -50,10 +179,8 @@ class ServiceProvider extends AddonServiceProvider
         }
     }
 
-    public function bootAddon(): void
+    private function graphDriver(): string
     {
-        $this->publishes([
-            __DIR__ . '/../config/cache_invalidation.php' => config_path('cache_invalidation.php'),
-        ], 'cache-invalidation-config');
+        return (string) $this->app['config']->get('cache_invalidation.driver', 'sqlite');
     }
 }
