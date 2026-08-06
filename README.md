@@ -226,15 +226,30 @@ Run the addon's own suite from its directory:
 composer install && composer test
 ```
 
+## Deploying
+
+- Run `cache-invalidation:doctor` as a deploy step. It exits non-zero when
+  invalidation cannot work, so a broken environment fails the pipeline instead of
+  quietly serving stale pages.
+- Restart your queue workers (`php artisan queue:restart`). A worker holds an open
+  handle on the graph, and a deploy that replaces `storage/` leaves it writing to a
+  file that no longer exists. The safety net turns that into over-invalidation
+  rather than staleness, but a restart avoids it.
+- Expect one broad invalidation after deploying. Every cached URL is untracked
+  until it has been rendered again, so the first save clears more than usual.
+  `cache-invalidation:stats` shows the graph filling up.
+- On full measure, `statamic:static:warm` fills the graph promptly instead of
+  lazily.
+
 ## Good to know
 
 - Assets are not tracked; saving one clears nothing extra.
-- On full measure, run `statamic:static:warm` after a deploy so the graph fills
-  promptly instead of lazily.
 - Recording only happens on a cache miss. Invalidation is one indexed lookup plus
   the deletes — nothing walks content, which matters with a single queue worker or
   `QUEUE_CONNECTION=sync`.
 - A page with more than 2,000 dependencies is treated as depending on everything.
+- Globals are not scoped per site, so on a multisite install saving one clears the
+  pages that read it across every site.
 
 ## License
 
