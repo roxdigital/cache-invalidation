@@ -6,7 +6,10 @@ namespace RoxDigital\CacheInvalidation\Tests\Recording;
 
 use PHPUnit\Framework\Attributes\Test;
 use RoxDigital\CacheInvalidation\Tests\TestCase;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\Nav;
+use Statamic\Statamic;
 
 final class NavigationTest extends TestCase
 {
@@ -58,6 +61,24 @@ final class NavigationTest extends TestCase
 
         $this->assertContains('nav:main_nav', $tags);
         $this->assertContains('nav:footer_nav', $tags);
+    }
+
+    #[Test]
+    public function rendering_a_nav_records_the_nav_and_not_the_pages_it_links_to(): void
+    {
+        Collection::make('pages')->save();
+        $linked = tap(Entry::make()->collection('pages')->slug('about')->data(['title' => 'About']))->save();
+
+        Nav::find('main_nav')->makeTree('default', [['entry' => $linked->id()]])->save();
+
+        $tags = $this->tagsRecordedDuring(fn () => Statamic::tag('nav:main_nav')->fetch());
+
+        // Statamic's TreeBuilder resolves every linked entry to build the menu.
+        // Recording those put an entry tag for each menu item on every page using
+        // the nav, so renaming any page in the menu cleared the whole site.
+        $this->assertContains('nav:main_nav', $tags);
+        $this->assertNotContains("entry:{$linked->id()}", $tags);
+        $this->assertNotContains('collection:pages', $tags);
     }
 
     #[Test]

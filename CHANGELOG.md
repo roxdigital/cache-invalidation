@@ -55,13 +55,20 @@ renders; v2 observes it rather than restating it.
 - Navigations are tagged where they render, so one used on a handful of pages clears
   only those. A nav in the shared layout still reaches every page, but as a
   consequence of where it is used rather than a special case.
-- Statamic's URL resolution is excluded from recording. Resolving a URL in a
-  structured collection makes Statamic validate the collection tree, which plucks
-  every entry in it; recording that made every page depend on its whole collection,
-  so saving any single page cleared every cached page. Measured on a 213-page site:
-  before, every page save cleared all 213; after, pages absent from the navigation
-  clear 0–5 URLs, while pages in the navigation still clear everything because their
-  title genuinely appears on every page.
+- Two kinds of read are excluded from recording, because both made almost every save
+  clear almost everything. Statamic's URL resolution, which for a structured
+  collection validates the whole collection tree; and navigation menus, where the
+  nav is recorded as `nav:{handle}` rather than as an `entry:` tag per menu item.
+
+  The navigation exclusion is a deliberate trade-off: renaming a page leaves its
+  menu label stale on already-cached pages until they clear for another reason, and
+  saving the navigation clears them. A page save clears where that page is rendered
+  as content.
+
+  Measured on a 215-page site: 31.9 tags per URL where recording everything gave
+  68.6, and a page save clears a median of 1 URL where before it cleared all of
+  them. 19 of 25 sampled pages clear 0–5 URLs. Saving a navigation clears all 215,
+  because all 215 render it.
 - Globals invalidate only where they are read. A set rendered in the layout still
   reaches every page; one rendered by a single block reaches that block's pages.
 - Form blueprint saves clear the pages rendering that form instead of the entire

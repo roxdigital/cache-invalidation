@@ -89,11 +89,19 @@ The cache is never flushed wholesale — URLs are invalidated individually, so
 is special-cased either: a navigation or global that reaches every page does so
 because it is recorded on every page, not because of a rule.
 
-**Rendered output only.** Statamic reads content to work out *which* entry a URL
-belongs to, and for a structured collection that includes validating the whole
-collection tree. Those reads are not recorded — the page does not display them.
-Without that distinction every page would depend on its entire collection, and
-saving one page would clear the whole site.
+**Rendered output only.** Two kinds of read are deliberately excluded, because
+recording them makes almost every save clear almost everything:
+
+- **URL resolution.** Statamic reads content to work out which entry a URL belongs
+  to, and for a structured collection that includes validating the whole collection
+  tree. The page does not display that.
+- **Navigation menus.** A nav is recorded as `nav:{handle}`, not as an `entry:` tag
+  per menu item. Otherwise a menu in your layout would make every page depend on
+  every page in it, and renaming one would clear the site.
+
+The second is a trade-off worth stating plainly: rename a page and its menu label
+stays stale on already-cached pages until they clear for another reason. Saving the
+navigation clears them. A page save clears where that page is rendered *as content*.
 
 **Safety net.** A URL that is cached but absent from the graph is treated as
 depending on everything and cleared by the next save. That covers pages cached

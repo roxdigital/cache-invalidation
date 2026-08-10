@@ -28,6 +28,7 @@ use RoxDigital\CacheInvalidation\Recording\TrackingEntryQueryBuilder;
 use RoxDigital\CacheInvalidation\Recording\TrackingEntryRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingFormRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingNavigationRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingNavTag;
 use RoxDigital\CacheInvalidation\Recording\TrackingNavTreeRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingVariables;
@@ -45,6 +46,7 @@ use Statamic\Stache\Query\EntryQueryBuilder;
 use Statamic\Stache\Stache;
 use Statamic\Stache\Stores\Store;
 use Statamic\Statamic;
+use Statamic\Tags\Nav as NavTag;
 use Statamic\StaticCaching\Cachers\Writer;
 use Statamic\StaticCaching\StaticCacheManager;
 
@@ -262,6 +264,10 @@ class ServiceProvider extends AddonServiceProvider
 
         Statamic::repository(NavigationRepositoryContract::class, TrackingNavigationRepository::class);
         Statamic::repository(NavTreeRepositoryContract::class, TrackingNavTreeRepository::class);
+
+        // Statamic resolves tag classes through the container, so this reaches the
+        // nav tag without touching the tag registry.
+        $this->app->bind(NavTag::class, TrackingNavTag::class);
 
         // The global variables store builds its items with app(Variables::class).
         $this->app->bind(VariablesContract::class, TrackingVariables::class);
