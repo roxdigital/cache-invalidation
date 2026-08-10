@@ -69,9 +69,28 @@ its scope, because an entry created tomorrow has an id that is in no tag set yet
 depth. If page C embeds a block that pulls in a global and another entry, page C
 carries all three dependencies and clears when any of them is saved.
 
-**Where reads are observed:** entries and terms at the query builder, globals at
-augmentation (so a global is only tagged where it is actually read), forms at
-`FormRepository::find()`.
+### How reads are observed
+
+Every piece of content in Statamic is fetched through a repository or a query
+builder resolved from the container. The addon replaces those with subclasses, so
+each read passes through it on the way to your template — nothing in your code
+changes, and there is no scanning or parsing.
+
+| Content | Where it is recorded |
+|---|---|
+| Entries | `EntryQueryBuilder::getFilteredKeys()` and `getItems()` |
+| Terms | `TermQueryBuilder`, via a replaced `TermRepository::query()` |
+| Globals | `Variables::newAugmentedInstance()`, on first value read |
+| Forms | `FormRepository::find()` |
+| Navigations | `NavigationRepository`, `NavTreeRepository`, and the `nav` tag |
+
+Entries hook `getFilteredKeys()` rather than `get()` because `count()` and
+`pluck()` bypass `get()` entirely; `getItems()` then adds item tags for the entries
+that survived `limit` and `offset`. A request-scoped recorder collects the tags, and
+the cacher writes them against the URL as the page is stored.
+
+This only runs on a cache miss — during a render you are already paying for. A
+cached hit never reaches it.
 
 ### What a save clears
 
@@ -207,9 +226,8 @@ Expect one round of broad invalidation after deploying while the graph fills.
 
 ## Local development
 
-To work on the addon against a real site, clone it inside the site and point
-Composer at the clone instead of the VCS source. Path repositories symlink by
-default, so edits in `src/` take effect on the next request with no reinstall.
+Clone the addon inside a site and point Composer at the clone. Path repositories
+symlink by default, so edits in `src/` take effect on the next request.
 
 ```bash
 git clone git@github.com:roxdigital/cache-invalidation.git addons/roxdigital/cache-invalidation
@@ -218,11 +236,7 @@ git clone git@github.com:roxdigital/cache-invalidation.git addons/roxdigital/cac
 ```json
 {
     "repositories": [
-        {
-            "type": "path",
-            "url": "addons/roxdigital/cache-invalidation",
-            "options": { "symlink": true }
-        }
+        { "type": "path", "url": "addons/roxdigital/cache-invalidation" }
     ]
 }
 ```
@@ -231,19 +245,18 @@ git clone git@github.com:roxdigital/cache-invalidation.git addons/roxdigital/cac
 composer require roxdigital/cache-invalidation:@dev
 ```
 
-Adding a class in a new subdirectory needs `composer dump-autoload` if the site was
-installed with an optimised autoloader. Switch back with
-`composer require roxdigital/cache-invalidation:^2.0` once the `path` repository is
-removed.
+A class in a new subdirectory needs `composer dump-autoload` if the site uses an
+optimised autoloader. To test a branch as a consumer would get it, require the
+branch alias instead — `2.x-dev` for branch `v2`, not `dev-v2`.
 
-Run the addon's own suite from its directory:
-
-```bash
-composer install && composer test
-```
+The addon's own suite runs from its directory with `composer install && composer test`.
 
 ## Deploying
 
+- **Clear the cache when you deploy code.** Templates, translations and PHP are not
+  content, so nothing dispatches an event for them — change a Blade file and the
+  cache keeps serving the old markup. `php artisan statamic:static:clear` belongs in
+  your deploy script; this addon narrows content invalidation, not code deploys.
 - Run `cache-invalidation:doctor` as a deploy step. It exits non-zero when
   invalidation cannot work, so a broken environment fails the pipeline instead of
   quietly serving stale pages.
@@ -257,12 +270,26 @@ composer install && composer test
 - On full measure, `statamic:static:warm` fills the graph promptly instead of
   lazily.
 
+## Not covered
+
+Statamic only dispatches invalidation events for content, and only some of it, so a
+few changes clear nothing. None of these are silent in a surprising way — they are
+listed so you know where the edges are.
+
+- **Assets.** Replacing an image clears nothing. `AssetSaved` does reach the
+  invalidator, but asset reads are not recorded, so there is no tag to match.
+- **Blueprints and fieldsets outside forms.** Adding a field to a collection
+  blueprint can change every page of that collection; Statamic only routes the
+  `forms` namespace to invalidation.
+- **Users.** A user save dispatches nothing. If a template renders a user's name,
+  rename them and it stays. Authors kept as entries are unaffected.
+- **Templates, translations and code.** See Deploying above.
+
 ## Good to know
 
-- Assets are not tracked; saving one clears nothing extra.
-- Recording only happens on a cache miss. Invalidation is one indexed lookup plus
-  the deletes — nothing walks content, which matters with a single queue worker or
-  `QUEUE_CONNECTION=sync`.
+- Invalidation is one indexed lookup plus the deletes. Nothing walks content, which
+  matters with a single queue worker or `QUEUE_CONNECTION=sync`, where it runs inside
+  the editor's save request.
 - A page with more than 2,000 dependencies is treated as depending on everything.
 - Globals are not scoped per site, so on a multisite install saving one clears the
   pages that read it across every site.
