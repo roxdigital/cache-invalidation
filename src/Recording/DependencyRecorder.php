@@ -31,9 +31,31 @@ final class DependencyRecorder
 
     private bool $overflowed = false;
 
+    private bool $suppressing = false;
+
+    /**
+     * Ignore everything recorded while the callback runs.
+     *
+     * For Statamic's own resolution machinery, which queries content to work out
+     * *which* entry a request is for. Those reads are not rendered output, and
+     * treating them as such attributes dependencies to a page that it does not
+     * display — see TrackingEntryRepository.
+     */
+    public function suppressed(callable $callback): mixed
+    {
+        $previous = $this->suppressing;
+        $this->suppressing = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->suppressing = $previous;
+        }
+    }
+
     public function add(string ...$tags): void
     {
-        if ($this->overflowed) {
+        if ($this->suppressing || $this->overflowed) {
             return;
         }
 
@@ -103,6 +125,11 @@ final class DependencyRecorder
         $this->add(Tag::form($handle));
     }
 
+    public function nav(string $handle): void
+    {
+        $this->add(Tag::nav($handle));
+    }
+
     /**
      * @return list<string>
      */
@@ -125,6 +152,7 @@ final class DependencyRecorder
     {
         $this->tags = [];
         $this->overflowed = false;
+        $this->suppressing = false;
     }
 
     /**

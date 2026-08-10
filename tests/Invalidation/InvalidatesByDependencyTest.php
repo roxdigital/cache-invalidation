@@ -159,17 +159,32 @@ final class InvalidatesByDependencyTest extends TestCase
     }
 
     #[Test]
-    public function saving_a_navigation_clears_every_cached_url(): void
+    public function saving_a_navigation_clears_only_the_pages_that_render_it(): void
     {
-        Nav::make('main')->title('Main')->save();
+        Nav::make('footer_nav')->title('Footer')->save();
+        Nav::make('sidebar_nav')->title('Sidebar')->save();
 
-        $this->cache('/a', ['entry:1']);
-        $this->cache('/b', ['entry:2']);
+        $this->cache('/has-footer-nav', ['nav:footer_nav']);
+        $this->cache('/has-sidebar-nav', ['nav:sidebar_nav']);
 
-        Nav::find('main')->title('Main nav')->save();
+        Nav::find('footer_nav')->title('Footer links')->save();
 
-        // A reorder or relabel changes links rendered in shared layout, and no
-        // per-page dependency can express that.
+        $this->assertCachedIs(['/has-sidebar-nav']);
+    }
+
+    #[Test]
+    public function a_navigation_in_the_shared_layout_still_clears_everything(): void
+    {
+        // Not a special case any more: a nav rendered on every page is recorded on
+        // every page, so "clear all" falls out of where it is used rather than
+        // being hardcoded.
+        Nav::make('main_nav')->title('Main')->save();
+
+        $this->cache('/a', ['nav:main_nav', 'entry:1']);
+        $this->cache('/b', ['nav:main_nav', 'entry:2']);
+
+        Nav::find('main_nav')->title('Main nav')->save();
+
         $this->assertCachedIs([]);
     }
 

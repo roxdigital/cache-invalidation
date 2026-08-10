@@ -25,12 +25,18 @@ use RoxDigital\CacheInvalidation\Http\AddCacheTagsHeader;
 use RoxDigital\CacheInvalidation\Invalidation\GraphInvalidator;
 use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
 use RoxDigital\CacheInvalidation\Recording\TrackingEntryQueryBuilder;
+use RoxDigital\CacheInvalidation\Recording\TrackingEntryRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingFormRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingNavigationRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingNavTreeRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingVariables;
+use Statamic\Contracts\Entries\EntryRepository as EntryRepositoryContract;
 use Statamic\Contracts\Entries\QueryBuilder as EntryQueryBuilderContract;
 use Statamic\Contracts\Forms\FormRepository as FormRepositoryContract;
 use Statamic\Contracts\Globals\Variables as VariablesContract;
+use Statamic\Contracts\Structures\NavigationRepository as NavigationRepositoryContract;
+use Statamic\Contracts\Structures\NavTreeRepository as NavTreeRepositoryContract;
 use Statamic\Contracts\Taxonomies\TermRepository as TermRepositoryContract;
 use Statamic\Events\StaticCacheCleared;
 use Statamic\Facades\StaticCache;
@@ -247,9 +253,15 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->bind(EntryQueryBuilderContract::class, $builder);
         $this->app->bind(EntryQueryBuilder::class, $builder);
 
+        // Separates URL resolution from rendered output; see the class docblock.
+        Statamic::repository(EntryRepositoryContract::class, TrackingEntryRepository::class);
+
         // TermRepository::query() constructs its builder directly instead of
         // resolving it, so the repository itself has to be replaced.
         Statamic::repository(TermRepositoryContract::class, TrackingTermRepository::class);
+
+        Statamic::repository(NavigationRepositoryContract::class, TrackingNavigationRepository::class);
+        Statamic::repository(NavTreeRepositoryContract::class, TrackingNavTreeRepository::class);
 
         // The global variables store builds its items with app(Variables::class).
         $this->app->bind(VariablesContract::class, TrackingVariables::class);

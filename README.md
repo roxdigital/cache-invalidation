@@ -82,10 +82,18 @@ augmentation (so a global is only tagged where it is actually read), forms at
 | Global set | Pages that read it — every page, if it is read in your layout |
 | Form or forms blueprint | Pages rendering that form |
 | Collection tree | Pages carrying that collection's list tag, plus the URLs Statamic reports as moved |
-| Navigation | Every cached URL |
+| Navigation | Pages that render it — every page, if it is in your layout |
 
 The cache is never flushed wholesale — URLs are invalidated individually, so
-`nocache` regions survive and pages come back without a global re-render.
+`nocache` regions survive and pages come back without a global re-render. Nothing
+is special-cased either: a navigation or global that reaches every page does so
+because it is recorded on every page, not because of a rule.
+
+**Rendered output only.** Statamic reads content to work out *which* entry a URL
+belongs to, and for a structured collection that includes validating the whole
+collection tree. Those reads are not recorded — the page does not display them.
+Without that distinction every page would depend on its entire collection, and
+saving one page would clear the whole site.
 
 **Safety net.** A URL that is cached but absent from the graph is treated as
 depending on everything and cleared by the next save. That covers pages cached

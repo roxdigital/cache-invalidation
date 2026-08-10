@@ -7,8 +7,6 @@ namespace RoxDigital\CacheInvalidation\Invalidation;
 use RoxDigital\CacheInvalidation\CachedUrls;
 use RoxDigital\CacheInvalidation\Graph\DependencyGraph;
 use RoxDigital\CacheInvalidation\Tag;
-use Statamic\Contracts\Structures\Nav;
-use Statamic\Contracts\Structures\NavTree;
 use Statamic\StaticCaching\Cacher;
 use Statamic\StaticCaching\DefaultInvalidator;
 
@@ -42,17 +40,6 @@ final class GraphInvalidator extends DefaultInvalidator
 
     public function invalidate($item): void
     {
-        // Navigation is the one deliberate blunt instrument. A reorder or relabel
-        // changes links rendered in shared layout, and no per-page dependency can
-        // express that. Clearing every cached URL rather than flushing keeps
-        // nocache regions and the graph itself intact, so pages come back without
-        // a full re-render storm.
-        if ($item instanceof Nav || $item instanceof NavTree) {
-            $this->clear($this->cached->all());
-
-            return;
-        }
-
         $tags = $this->tags->forItem($item);
 
         $this->clear([

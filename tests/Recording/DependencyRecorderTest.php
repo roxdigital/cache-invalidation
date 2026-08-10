@@ -36,6 +36,51 @@ final class DependencyRecorderTest extends TestCase
     }
 
     #[Test]
+    public function suppressed_drops_everything_recorded_inside_it(): void
+    {
+        $this->recorder->add('entry:before');
+
+        $returned = $this->recorder->suppressed(function (): string {
+            $this->recorder->add('entry:inside');
+            $this->recorder->collections(['pages']);
+
+            return 'result';
+        });
+
+        $this->recorder->add('entry:after');
+
+        $this->assertSame('result', $returned, 'the callback result is passed through');
+        $this->assertSame(['entry:before', 'entry:after'], $this->recorder->tags());
+    }
+
+    #[Test]
+    public function suppression_is_lifted_even_when_the_callback_throws(): void
+    {
+        try {
+            $this->recorder->suppressed(fn () => throw new \RuntimeException('boom'));
+        } catch (\RuntimeException) {
+            // expected
+        }
+
+        $this->recorder->add('entry:after');
+
+        $this->assertSame(['entry:after'], $this->recorder->tags());
+    }
+
+    #[Test]
+    public function suppression_nests(): void
+    {
+        $this->recorder->suppressed(function (): void {
+            $this->recorder->suppressed(fn () => $this->recorder->add('entry:inner'));
+            $this->recorder->add('entry:outer');
+        });
+
+        $this->recorder->add('entry:after');
+
+        $this->assertSame(['entry:after'], $this->recorder->tags());
+    }
+
+    #[Test]
     public function it_collapses_to_the_overflow_tag_past_the_cap(): void
     {
         $this->recorder->entries(array_map(fn (int $i): string => (string) $i, range(1, 2_500)));

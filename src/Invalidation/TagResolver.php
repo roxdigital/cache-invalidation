@@ -10,6 +10,8 @@ use Statamic\Contracts\Entries\Collection;
 use Statamic\Contracts\Entries\Entry;
 use Statamic\Contracts\Forms\Form;
 use Statamic\Contracts\Globals\Variables;
+use Statamic\Contracts\Structures\Nav;
+use Statamic\Contracts\Structures\NavTree;
 use Statamic\Structures\CollectionTree;
 use Statamic\Taxonomies\LocalizedTerm;
 use Statamic\Taxonomies\Term;
@@ -44,6 +46,14 @@ final class TagResolver
             $item instanceof Variables => [Tag::globalSet((string) $item->globalSet()->handle())],
 
             $item instanceof Form => [Tag::form((string) $item->handle())],
+
+            // A nav is tagged where it renders rather than clearing the whole
+            // cache, so a nav used on a handful of pages clears only those. A nav
+            // in the shared layout still reaches every page — that is now an
+            // emergent consequence of where it is used, not a hardcoded rule.
+            $item instanceof Nav => [Tag::nav((string) $item->handle())],
+
+            $item instanceof NavTree => [Tag::nav((string) $item->structure()->handle())],
 
             $item instanceof Collection => [Tag::collection((string) $item->handle())],
 

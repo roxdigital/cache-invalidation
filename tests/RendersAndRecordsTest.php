@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoxDigital\CacheInvalidation\Tests;
 
 use PHPUnit\Framework\Attributes\Test;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\GlobalSet;
@@ -34,9 +35,20 @@ final class RendersAndRecordsTest extends TestCase
         $set = tap(GlobalSet::make('footer'))->save();
         $set->makeLocalization('default')->data(['phone' => '0123'])->save();
 
-        Collection::make('pages')->routes('/{slug}')->template('entry')->save();
+        // Structured, like a real pages collection. That matters: findByUri()
+        // consults the tree for a structured collection, and Tree::tree() runs
+        // validateTree(), which plucks the whole collection.
+        $pages = Collection::make('pages')
+            ->routes('/{slug}')
+            ->template('entry')
+            ->structureContents(['root' => false]);
+        $pages->save();
 
-        Entry::make()->collection('pages')->slug('about')->data(['title' => 'About us'])->save();
+        $about = Entry::make()->collection('pages')->slug('about')->data(['title' => 'About us']);
+        $about->save();
+
+        // In a structured collection the URI comes from the tree, not the route.
+        $pages->structure()->in('default')->tree([['entry' => $about->id()]])->save();
     }
 
     protected function resolveApplicationConfiguration($app): void
@@ -85,6 +97,27 @@ final class RendersAndRecordsTest extends TestCase
     }
 
     #[Test]
+    public function resolving_a_url_in_a_structured_collection_records_only_the_entry(): void
+    {
+        // findByUri() consults the collection tree, and Tree::tree() runs
+        // validateTree(), which plucks every entry in the collection. Recording
+        // that made every page depend on its whole collection, so saving any one
+        // page cleared every cached page on the site.
+        //
+        // Blink is flushed first because the tree is memoised per process: without
+        // this the tree built during setUp is reused and the pluck never runs,
+        // which is exactly why an earlier version of this test passed against the
+        // bug it was written for.
+        Blink::flush();
+
+        $tags = $this->tagsRecordedDuring(fn () => Entry::findByUri('/about'));
+
+        $about = Entry::query()->where('collection', 'pages')->first();
+
+        $this->assertSame(["entry:{$about->id()}"], $tags);
+    }
+
+    #[Test]
     public function rendering_a_page_does_not_record_collections_it_never_touched(): void
     {
         // Statamic resolves every frontend request through findByUri(), which
@@ -101,7 +134,12 @@ final class RendersAndRecordsTest extends TestCase
         $this->assertContains('collection:articles', $tags, 'the collection it listed');
         $this->assertNotContains('collection:unrelated', $tags);
         $this->assertNotContains('collection:another', $tags);
-        $this->assertNotContains('collection:pages', $tags, 'its own collection was resolved by uri, not listed');
+
+        // The page's own collection is structured, so resolving its URL makes
+        // Statamic validate the tree by plucking every entry in it. That is
+        // bookkeeping, not rendered output: recording it made saving any single
+        // page clear every cached page on the site.
+        $this->assertNotContains('collection:pages', $tags);
     }
 
     #[Test]

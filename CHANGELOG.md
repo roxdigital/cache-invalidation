@@ -51,9 +51,17 @@ renders; v2 observes it rather than restating it.
 
 - The whole cache is no longer flushed for globals, navigations, form blueprints or
   collection trees. URLs are invalidated individually, so `nocache` regions and the
-  graph survive. A navigation save still clears every cached URL — a reorder
-  changes links in shared layout and no per-page dependency can express that — but
-  it clears rather than flushes.
+  graph survive.
+- Navigations are tagged where they render, so one used on a handful of pages clears
+  only those. A nav in the shared layout still reaches every page, but as a
+  consequence of where it is used rather than a special case.
+- Statamic's URL resolution is excluded from recording. Resolving a URL in a
+  structured collection makes Statamic validate the collection tree, which plucks
+  every entry in it; recording that made every page depend on its whole collection,
+  so saving any single page cleared every cached page. Measured on a 213-page site:
+  before, every page save cleared all 213; after, pages absent from the navigation
+  clear 0–5 URLs, while pages in the navigation still clear everything because their
+  title genuinely appears on every page.
 - Globals invalidate only where they are read. A set rendered in the layout still
   reaches every page; one rendered by a single block reaches that block's pages.
 - Form blueprint saves clear the pages rendering that form instead of the entire

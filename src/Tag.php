@@ -56,4 +56,9 @@ final class Tag
     {
         return 'form:'.$handle;
     }
+
+    public static function nav(string $handle): string
+    {
+        return 'nav:'.$handle;
+    }
 }
