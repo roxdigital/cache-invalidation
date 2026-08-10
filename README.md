@@ -14,6 +14,10 @@ when you add a pagebuilder block.
 Requires PHP `^8.4`, Laravel `^12.0 || ^13.0`, Statamic `^6.0`. Works with both the
 `half` and `full` static caching strategies.
 
+Recording extends Statamic's Stache repositories and query builders, so this assumes
+the standard flat-file content driver. A site running `statamic/eloquent-driver`
+replaces those, and has not been tested.
+
 ## Installation
 
 Add the VCS source to your project's `composer.json`:
@@ -88,6 +92,12 @@ Entries hook `getFilteredKeys()` rather than `get()` because `count()` and
 `pluck()` bypass `get()` entirely; `getItems()` then adds item tags for the entries
 that survived `limit` and `offset`. A request-scoped recorder collects the tags, and
 the cacher writes them against the URL as the page is stored.
+
+Because the hooks sit at that level, how a template asks does not matter — a PHP
+query in a `@php` block or view model, an Antlers tag (`<s:collection>`,
+`<s:taxonomy>`, `<s:nav>`, `<s:form>`), an augmented field (`$block->entry`), or a
+global off the cascade (`$footer->phone`) all pass through. What does not is content
+fetched outside Statamic entirely; see [Data from outside Statamic](#data-from-outside-statamic).
 
 This only runs on a cache miss — during a render you are already paying for. A
 cached hit never reaches it.
