@@ -8,6 +8,7 @@ use Illuminate\Database\DatabaseManager;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Facade;
 use RoxDigital\CacheInvalidation\Blade\CacheTagsDirective;
 use RoxDigital\CacheInvalidation\Cachers\TrackingApplicationCacher;
 use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
@@ -275,6 +276,33 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->bind(VariablesContract::class, TrackingVariables::class);
 
         Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
+
+        $this->forgetCachedFacades();
+    }
+
+    /**
+     * Facades cache the instance they resolved, so rebinding a repository in boot is
+     * not enough: anything that touched Statamic\Facades\Entry earlier in the boot
+     * cycle keeps the original repository for the rest of the request, and every read
+     * through that facade goes unrecorded.
+     *
+     * This bit for real. One site recorded nothing for findByUri while another
+     * recorded correctly, on the same addon version, because they differ in whether
+     * something resolves the Entry facade during boot. Clearing the instances we
+     * rebind makes the outcome the same everywhere.
+     */
+    private function forgetCachedFacades(): void
+    {
+        foreach ([
+            EntryRepositoryContract::class,
+            TermRepositoryContract::class,
+            NavigationRepositoryContract::class,
+            NavTreeRepositoryContract::class,
+            FormRepositoryContract::class,
+            VariablesContract::class,
+        ] as $accessor) {
+            Facade::clearResolvedInstance($accessor);
+        }
     }
 
     /**

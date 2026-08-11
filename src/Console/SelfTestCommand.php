@@ -88,34 +88,64 @@ final class SelfTestCommand extends Command
     }
 
     /**
+     * One entry per member, never a compound check.
+     *
+     * A single label covering several members tells you something broke but not
+     * what, which is exactly the wrong trade when this is meant to unblock someone
+     * mid-upgrade.
+     *
      * @return array<string, bool>
      */
     private function structuralChecks(): array
     {
-        return [
-            'EntryQueryBuilder::getFilteredKeys/getItems' => $this->hasMethods(\Statamic\Stache\Query\EntryQueryBuilder::class, ['getFilteredKeys', 'getItems'])
-                && $this->hasProperty(\Statamic\Stache\Query\EntryQueryBuilder::class, 'collections')
-                && $this->hasProperty(\Statamic\Query\Builder::class, 'wheres'),
-            'TermQueryBuilder::getFilteredKeys/getItems' => $this->hasMethods(\Statamic\Stache\Query\TermQueryBuilder::class, ['getFilteredKeys', 'getItems'])
-                && $this->hasProperty(\Statamic\Stache\Query\TermQueryBuilder::class, 'taxonomies'),
-            'EntryRepository::findByUri' => $this->hasMethods(\Statamic\Stache\Repositories\EntryRepository::class, ['findByUri']),
-            'TermRepository::query/ensureAssociations' => $this->hasMethods(\Statamic\Stache\Repositories\TermRepository::class, ['query', 'ensureAssociations'])
-                && $this->hasProperty(\Statamic\Stache\Repositories\TermRepository::class, 'store'),
-            'NavigationRepository::findByHandle/all' => $this->hasMethods(\Statamic\Stache\Repositories\NavigationRepository::class, ['findByHandle', 'all']),
-            'NavTreeRepository::find' => $this->hasMethods(\Statamic\Stache\Repositories\NavTreeRepository::class, ['find']),
-            'Variables::newAugmentedInstance' => $this->hasMethods(\Statamic\Globals\Variables::class, ['newAugmentedInstance'])
-                && $this->hasMethods(\Statamic\Globals\AugmentedVariables::class, ['get']),
-            'FormRepository::find' => $this->hasMethods(\Statamic\Forms\FormRepository::class, ['find']),
-            'Tags\Nav::structure' => $this->hasMethods(\Statamic\Tags\Nav::class, ['structure']),
-            'Cachers::cachePage/getUrl/isExcluded' => $this->hasMethods(\Statamic\StaticCaching\Cachers\ApplicationCacher::class, ['cachePage'])
-                && $this->hasMethods(\Statamic\StaticCaching\Cachers\FileCacher::class, ['cachePage'])
-                && $this->hasMethods(\Statamic\StaticCaching\Cachers\AbstractCacher::class, ['getUrl', 'isExcluded', 'getUrls', 'getDomains']),
-            'DefaultInvalidator::getItemUrls' => $this->hasMethods(\Statamic\StaticCaching\DefaultInvalidator::class, ['getItemUrls'])
-                && $this->hasProperty(\Statamic\StaticCaching\DefaultInvalidator::class, 'refreshing'),
-            'StaticCacheManager::extend' => $this->hasMethods(\Statamic\StaticCaching\StaticCacheManager::class, ['extend', 'cacheStore']),
-            'Invalidate is queued' => is_subclass_of(\Statamic\StaticCaching\Invalidate::class, ShouldQueue::class),
-            'Tag classes resolve via the container' => is_string(app('statamic.tags')->get('nav') ?? null),
+        $methods = [
+            \Statamic\Stache\Query\EntryQueryBuilder::class => ['getFilteredKeys', 'getItems'],
+            \Statamic\Stache\Query\TermQueryBuilder::class => ['getFilteredKeys', 'getItems'],
+            \Statamic\Stache\Repositories\EntryRepository::class => ['findByUri'],
+            \Statamic\Stache\Repositories\TermRepository::class => ['query', 'ensureAssociations'],
+            \Statamic\Stache\Repositories\NavigationRepository::class => ['findByHandle', 'all'],
+            \Statamic\Stache\Repositories\NavTreeRepository::class => ['find'],
+            \Statamic\Globals\Variables::class => ['newAugmentedInstance'],
+            \Statamic\Globals\AugmentedVariables::class => ['get'],
+            \Statamic\Forms\FormRepository::class => ['find'],
+            \Statamic\Tags\Nav::class => ['structure'],
+            \Statamic\StaticCaching\Cachers\ApplicationCacher::class => ['cachePage'],
+            \Statamic\StaticCaching\Cachers\FileCacher::class => ['cachePage'],
+            \Statamic\StaticCaching\Cachers\AbstractCacher::class => ['getUrl', 'isExcluded', 'getUrls', 'getDomains'],
+            \Statamic\StaticCaching\DefaultInvalidator::class => ['getItemUrls'],
+            \Statamic\StaticCaching\StaticCacheManager::class => ['extend', 'cacheStore'],
         ];
+
+        $properties = [
+            \Statamic\Stache\Query\EntryQueryBuilder::class => ['collections'],
+            \Statamic\Stache\Query\TermQueryBuilder::class => ['taxonomies'],
+            \Statamic\Query\Builder::class => ['wheres'],
+            \Statamic\Stache\Repositories\TermRepository::class => ['store'],
+        ];
+
+        $checks = [];
+
+        foreach ($methods as $class => $names) {
+            foreach ($names as $name) {
+                $checks[$this->shortName($class)."::{$name}()"] = class_exists($class) && method_exists($class, $name);
+            }
+        }
+
+        foreach ($properties as $class => $names) {
+            foreach ($names as $name) {
+                $checks[$this->shortName($class).'::$'.$name] = class_exists($class) && property_exists($class, $name);
+            }
+        }
+
+        $checks['Invalidate is queued'] = is_subclass_of(\Statamic\StaticCaching\Invalidate::class, ShouldQueue::class);
+        $checks['Tag classes resolve via the container'] = is_string(app('statamic.tags')->get('nav') ?? null);
+
+        return $checks;
+    }
+
+    private function shortName(string $class): string
+    {
+        return str_replace('Statamic\\', '', $class);
     }
 
     private function behaviouralChecks(DependencyRecorder $recorder): void
@@ -201,7 +231,15 @@ final class SelfTestCommand extends Command
             return;
         }
 
-        $tags = $this->record($recorder, fn () => Entry::findByUri($entry->uri(), Site::current()->handle()));
+        // Resolved before recording starts. uri() itself consults the collection tree
+        // for a structured collection, so calling it inside the measured block would
+        // attribute Statamic's own tree validation to this check and fail it for the
+        // wrong reason — non-deterministically, since the tree is memoised per
+        // process.
+        $uri = (string) $entry->uri();
+        $site = Site::current()->handle();
+
+        $tags = $this->record($recorder, fn () => Entry::findByUri($uri, $site));
 
         $this->report(
             'Resolving a URL records only the entry',

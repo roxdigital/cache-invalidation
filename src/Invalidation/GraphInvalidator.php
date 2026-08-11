@@ -24,6 +24,18 @@ use Statamic\StaticCaching\DefaultInvalidator;
  */
 final class GraphInvalidator extends DefaultInvalidator
 {
+    /**
+     * Whether the current pass should refresh rather than purge.
+     *
+     * Deliberately ours rather than DefaultInvalidator::$refreshing. That property
+     * only exists in newer 6.x releases, and on versions without it `refresh()`
+     * duplicates the invalidation logic instead of delegating to `invalidate()` —
+     * which would bypass the graph entirely and refresh only the saved item's own
+     * URL. Overriding refresh() and tracking the flag here behaves the same on every
+     * 6.x, and removes a dependency on a protected member that moved once already.
+     */
+    private bool $refreshingUrls = false;
+
     public function __construct(
         Cacher $cacher,
         ?array $rules,
@@ -36,6 +48,24 @@ final class GraphInvalidator extends DefaultInvalidator
         // to null outright — would otherwise fatal on a TypeError. The rules
         // themselves are unused; they exist so DefaultInvalidator stays satisfied.
         parent::__construct($cacher, $rules ?? []);
+    }
+
+    public function refresh($item): void
+    {
+        if (! config('statamic.static_caching.background_recache', false)) {
+            $this->invalidate($item);
+
+            return;
+        }
+
+        $previous = $this->refreshingUrls;
+        $this->refreshingUrls = true;
+
+        try {
+            $this->invalidate($item);
+        } finally {
+            $this->refreshingUrls = $previous;
+        }
     }
 
     public function invalidate($item): void
@@ -60,10 +90,7 @@ final class GraphInvalidator extends DefaultInvalidator
             return;
         }
 
-        // DefaultInvalidator::refresh() flips this before delegating here. v1
-        // ignored it and always hard-purged, which silently broke
-        // static_caching.background_recache.
-        $this->refreshing
+        $this->refreshingUrls
             ? $this->cacher->refreshUrls($urls)
             : $this->cacher->invalidateUrls($urls);
     }

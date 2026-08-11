@@ -15,6 +15,10 @@ use RoxDigital\CacheInvalidation\Graph\SqliteGraph;
 use RoxDigital\CacheInvalidation\Invalidation\GraphInvalidator;
 use RoxDigital\CacheInvalidation\Invalidation\TagResolver;
 use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
+use RoxDigital\CacheInvalidation\Recording\TrackingEntryRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingFormRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingNavigationRepository;
+use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
 use RoxDigital\CacheInvalidation\Tests\Doubles\HostInvalidator;
 use RoxDigital\CacheInvalidation\Tests\TestCase;
 use Statamic\Facades\Collection;
@@ -136,6 +140,43 @@ final class InvalidatorWiringTest extends TestCase
         $this->graph->record('https://site.test/a', ["entry:{$entry->id()}"]);
 
         $invalidator->refresh($entry);
+    }
+
+    #[Test]
+    public function the_facades_resolve_the_tracking_repositories(): void
+    {
+        // Facades cache the instance they resolved. Rebinding in boot is therefore
+        // not enough on its own: anything touching a facade earlier in the boot cycle
+        // keeps the original repository and its reads go unrecorded.
+        //
+        // This asserts the invariant, not the failure — a stale facade depends on
+        // boot ordering that the test harness does not reproduce. It was verified
+        // against two live sites, one of which recorded nothing through
+        // Entry::findByUri() until the provider started clearing these.
+        $this->assertInstanceOf(TrackingEntryRepository::class, \Statamic\Facades\Entry::getFacadeRoot());
+        $this->assertInstanceOf(TrackingTermRepository::class, \Statamic\Facades\Term::getFacadeRoot());
+        $this->assertInstanceOf(TrackingNavigationRepository::class, \Statamic\Facades\Nav::getFacadeRoot());
+        $this->assertInstanceOf(TrackingFormRepository::class, \Statamic\Facades\Form::getFacadeRoot());
+    }
+
+    #[Test]
+    public function resolving_a_url_through_the_facade_records_only_the_entry(): void
+    {
+        $collection = Collection::make('pages')->routes('/{slug}')->structureContents(['root' => false]);
+        $collection->save();
+
+        $entry = tap(Entry::make()->collection('pages')->slug('about')->data(['title' => 'About']))->save();
+        $collection->structure()->in('default')->tree([['entry' => $entry->id()]])->save();
+
+        // Resolved before recording; uri() consults the tree itself.
+        $uri = (string) $entry->fresh()->uri();
+        $this->assertNotSame('', $uri, 'the fixture entry needs a resolvable uri');
+
+        \Statamic\Facades\Blink::flush();
+
+        $tags = $this->tagsRecordedDuring(fn () => Entry::findByUri($uri, 'default'));
+
+        $this->assertSame(["entry:{$entry->id()}"], $tags);
     }
 
     #[Test]
