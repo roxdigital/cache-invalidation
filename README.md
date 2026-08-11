@@ -158,6 +158,9 @@ php artisan cache-invalidation:clear api:reviews
 
 # Deploy check — exits non-zero when invalidation cannot work.
 php artisan cache-invalidation:doctor
+
+# Run after upgrading Statamic: verifies the addon still fits this version.
+php artisan cache-invalidation:selftest
 ```
 
 `CACHE_INVALIDATION_DEBUG=true` adds an `X-Cache-Tags` header as pages are cached,
@@ -230,16 +233,28 @@ and not public API. A Statamic upgrade can move them, so **run this addon's test
 suite after bumping `statamic/cms`** — it is built to fail loudly on exactly these
 seams rather than degrade quietly.
 
-From a clone of the addon, not from the site:
+**From inside the site**, right after bumping `statamic/cms`:
+
+```bash
+php artisan cache-invalidation:selftest
+```
+
+It checks every seam twice against the Statamic version that site has installed:
+structurally, that the methods and properties still exist; and behaviourally, by
+recording against your own content and asserting the tags that come back. The second
+kind is what matters — a method can survive a rename and still behave differently,
+which is how every bug found while building this actually presented. Exits non-zero
+on failure, so it can gate a Statamic upgrade in CI.
+
+Checks that need content the site does not have are skipped, not failed.
+
+The addon's own suite is the fuller check, but it can only run from a clone — its dev
+dependencies are never installed in a site:
 
 ```bash
 git clone git@github.com:roxdigital/cache-invalidation.git && cd cache-invalidation
 composer install && composer test
 ```
-
-The suite resolves whatever Statamic version Composer gives it, so it tests against
-the release you are about to move to. CI does the same on every push, which means a
-breaking change usually surfaces there first.
 
 What it extends, and the member that matters:
 
