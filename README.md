@@ -37,12 +37,6 @@ Add the VCS source to your project's `composer.json`:
 composer require roxdigital/cache-invalidation
 ```
 
-While 2.0 is a release candidate, ask for it explicitly:
-
-```bash
-composer require "roxdigital/cache-invalidation:2.0.0-rc.1" -W
-```
-
 That's it. Nothing to publish, no migration, no configuration. The addon registers
 itself as Statamic's invalidator and creates its own storage on first use. Verify
 with:
