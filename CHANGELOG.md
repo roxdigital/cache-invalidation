@@ -32,10 +32,17 @@ renders; v2 observes it rather than restating it.
   everything. Covers pages cached before install, a lost graph, and recorder bugs,
   so the failure mode is over-invalidation that heals after one render rather than
   a page that stays stale with no symptom.
-- `cache-invalidation:why`, `:affected`, `:stats` and `:doctor`. `affected` answers
-  "what clears if I save this?" before saving — the question the 1.x design could
-  not be asked. `doctor` exits non-zero when invalidation cannot work, so a broken
-  environment fails a deploy.
+- `cache-invalidation:why`, `:affected`, `:stats`, `:clear` and `:doctor`. `affected`
+  answers "what clears if I save this?" before saving — the question the 1.x design
+  could not be asked. `doctor` exits non-zero when invalidation cannot work, so a
+  broken environment fails a deploy.
+- `cache-invalidation:selftest`, which verifies the Statamic integration from inside
+  a site. Recording subclasses Statamic internals, several of them `protected` and
+  so outside semver, and the addon's own suite cannot run from a site because its
+  dev dependencies are never installed there. This checks each seam structurally by
+  reflection and behaviourally by recording against the site's own content, which is
+  the kind of break reflection cannot see. Read-only, skips checks the site has no
+  content for, and exits non-zero so it can gate a Statamic upgrade in CI.
 - An `X-Cache-Tags` header behind `CACHE_INVALIDATION_DEBUG`.
 - A public API for data this addon cannot observe — an HTTP call, a custom Eloquent
   model, a file. `CacheTags::add()` (or `@cachetags(...)`) declares the dependency
