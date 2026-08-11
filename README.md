@@ -230,9 +230,16 @@ and not public API. A Statamic upgrade can move them, so **run this addon's test
 suite after bumping `statamic/cms`** — it is built to fail loudly on exactly these
 seams rather than degrade quietly.
 
+From a clone of the addon, not from the site:
+
 ```bash
+git clone git@github.com:roxdigital/cache-invalidation.git && cd cache-invalidation
 composer install && composer test
 ```
+
+The suite resolves whatever Statamic version Composer gives it, so it tests against
+the release you are about to move to. CI does the same on every push, which means a
+breaking change usually surfaces there first.
 
 What it extends, and the member that matters:
 
