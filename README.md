@@ -37,6 +37,12 @@ Add the VCS source to your project's `composer.json`:
 composer require roxdigital/cache-invalidation
 ```
 
+While 2.0 is a release candidate, ask for it explicitly:
+
+```bash
+composer require "roxdigital/cache-invalidation:2.0.0-rc.1" -W
+```
+
 That's it. Nothing to publish, no migration, no configuration. The addon registers
 itself as Statamic's invalidator and creates its own storage on first use. Verify
 with:
@@ -193,31 +199,20 @@ Entries, terms, globals and forms are observed automatically. Data that reaches 
 template from somewhere else — an HTTP call, a custom Eloquent model, a file — is
 not: nothing sees the read, and nothing knows when it changes. Declare both halves.
 
-Where it is rendered:
-
-```blade
-@cachetags('api:reviews')
-```
-
-Or from PHP, in a ViewModel or component:
+Declare it where it renders — `@cachetags('api:reviews')` in Blade, or
+`CacheTags::add('api:reviews')` from a ViewModel or component — and clear it wherever
+that data changes:
 
 ```php
 use RoxDigital\CacheInvalidation\Facades\CacheTags;
 
-CacheTags::add('api:reviews');
-```
-
-And wherever that data changes — the job that refetched it, say:
-
-```php
 CacheTags::invalidate('api:reviews');   // returns the number of URLs cleared
 CacheTags::urlsFor('api:reviews');      // preview, without clearing
 ```
 
 Tags are arbitrary strings; namespace them (`api:reviews`, not `reviews`) so they
-cannot collide with a built-in. `CacheTags::invalidate()` also works with built-in
-tags, so `CacheTags::invalidate('collection:articles')` clears every page listing
-articles.
+cannot collide with a built-in. It works with built-in tags too, so
+`CacheTags::invalidate('collection:articles')` clears every page listing articles.
 
 Unlike a content save, this does not sweep up cached URLs that are missing from the
 graph. That safety net exists so routine editing can never leave a page stale;
@@ -233,6 +228,46 @@ and upgrades the pin. Your own subclass is still respected, but
 `customEntryUrls()` is gone — the relations it existed for are now observed.
 
 Expect one round of broad invalidation after deploying while the graph fills.
+
+## Upgrading Statamic
+
+Recording works by subclassing Statamic internals, several of which are `protected`
+and not public API. A Statamic upgrade can move them, so **run this addon's test
+suite after bumping `statamic/cms`** — it is built to fail loudly on exactly these
+seams rather than degrade quietly.
+
+```bash
+composer install && composer test
+```
+
+What it extends, and the member that matters:
+
+| Statamic class | Relied on |
+|---|---|
+| `Stache\Query\EntryQueryBuilder` | `getFilteredKeys()`, `getItems()`, `$collections`, `$wheres` |
+| `Stache\Query\TermQueryBuilder` | `getFilteredKeys()`, `getItems()`, `$taxonomies` |
+| `Stache\Repositories\EntryRepository` | `findByUri()` |
+| `Stache\Repositories\TermRepository` | `query()`, `ensureAssociations()`, `$store` |
+| `Stache\Repositories\NavigationRepository` | `findByHandle()`, `all()` |
+| `Stache\Repositories\NavTreeRepository` | `find()` |
+| `Globals\Variables` + `AugmentedVariables` | `newAugmentedInstance()`, `get()` |
+| `Forms\FormRepository` | `find()` |
+| `Tags\Nav` | `structure()` |
+| `StaticCaching\Cachers\ApplicationCacher`, `FileCacher` | `cachePage()`, `getUrl()`, `isExcluded()` |
+| `StaticCaching\DefaultInvalidator` | `getItemUrls()`, `$refreshing`, `$cacher` |
+| `StaticCaching\StaticCacheManager` | `extend()`, and that custom creators receive the merged strategy config |
+
+Three behavioural assumptions are worth naming, because a change there breaks
+nothing visibly:
+
+- **The `$wheres` array shape** (`type`, `column`, `operator`, `boolean`) decides
+  whether a query counts as a lookup of specific items. A change here silently makes
+  invalidation broader or — worse — narrower.
+- **Tag classes resolve through the container** (`Tags\Loader::init`), which is how
+  the nav tag is replaced without touching the tag registry.
+- **`StaticCaching\Invalidate` is `ShouldQueue`** and drives invalidation from a
+  fixed list of content events. Anything not on that list clears nothing; see
+  [Not covered](#not-covered).
 
 ## Local development
 
