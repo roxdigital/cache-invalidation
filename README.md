@@ -128,9 +128,11 @@ recording them makes almost every save clear almost everything:
   per menu item. Otherwise a menu in your layout would make every page depend on
   every page in it, and renaming one would clear the site.
 
-The second is a trade-off worth stating plainly: rename a page and its menu label
-stays stale on already-cached pages until they clear for another reason. Saving the
-navigation clears them. A page save clears where that page is rendered *as content*.
+The second is a deliberate trade-off: rename a page and its menu label stays stale on
+already-cached pages until they clear for another reason. A page save clears where
+that page is rendered *as content*; the menu is the navigation's concern, so **save
+the navigation to update it everywhere**. That is the intended workflow — changing a
+menu means editing the navigation.
 
 **Safety net.** A URL that is cached but absent from the graph is treated as
 depending on everything and cleared by the next save. That covers pages cached
@@ -337,8 +339,11 @@ Statamic only dispatches invalidation events for content, and only some of it, s
 few changes clear nothing. None of these are silent in a surprising way — they are
 listed so you know where the edges are.
 
-- **Assets.** Replacing an image clears nothing. `AssetSaved` does reach the
-  invalidator, but asset reads are not recorded, so there is no tag to match.
+- **Assets.** Replacing an image or setting a focal point in the asset browser clears
+  nothing on its own. `AssetSaved` reaches the invalidator, but asset reads are not
+  recorded, so there is no tag to match. In practice this rarely bites: assets are
+  normally changed while working on a page, and saving that page clears it. Save the
+  page if you edited an asset in isolation.
 - **Blueprints and fieldsets outside forms.** Adding a field to a collection
   blueprint can change every page of that collection; Statamic only routes the
   `forms` namespace to invalidation.
