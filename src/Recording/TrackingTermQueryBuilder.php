@@ -13,6 +13,7 @@ use Statamic\Stache\Stores\Store;
  */
 final class TrackingTermQueryBuilder extends TermQueryBuilder
 {
+    use AppliesInheritedScopes;
     use DetectsItemLookups;
 
     public function __construct(

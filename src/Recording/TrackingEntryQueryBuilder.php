@@ -23,6 +23,7 @@ use Statamic\Stache\Stores\Store;
  */
 final class TrackingEntryQueryBuilder extends EntryQueryBuilder
 {
+    use AppliesInheritedScopes;
     use DetectsItemLookups;
 
     public function __construct(

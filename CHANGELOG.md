@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Custom query scopes now work on the tracking entry and term query builders.
+  Statamic keys its scope registry on the exact builder class, so a scope a site
+  registered against `Stache\Query\EntryQueryBuilder` was invisible to the
+  subclass this addon substitutes, and calling it fatally threw
+  `BadMethodCallException: Call to undefined method ...::yourScope()`. The
+  ordering was not a fluke: addons boot inside `$app->booted()`, so a site's own
+  `boot()` always registers its scopes before this addon rebinds the builder. A
+  scope registered against any ancestor of a tracking builder now applies to it.
+
 ## [2.0.0] - 2026-08-06
 
 Invalidation is now derived from what pages actually read, instead of from rules
