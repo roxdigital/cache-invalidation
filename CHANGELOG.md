@@ -4,12 +4,133 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- A host app whose `statamic.static_caching.invalidation.rules` is the string
+  `all` no longer fatals the moment static caching is switched on. Statamic
+  documents that value and checks for exactly it in
+  `DefaultInvalidator::invalidate()`, so a stock config hit
+  `TypeError: GraphInvalidator::__construct(): Argument #2 ($rules) must be of
+  type ?array, string given` during boot. Any non-array value is now normalised
+  to `[]`: `all` means flush everything on any save, which is precisely the
+  behaviour the graph replaces, so it must not reach the parent.
+- Globals no longer come back from the cache as `__PHP_Incomplete_Class`. Laravel
+  unserializes cache payloads against an allow list when
+  `cache.serializable_classes` holds an array, and Statamic fills that array with
+  its own classes. Binding `TrackingVariables` over the `Variables` contract meant
+  the globals store cached items of a class nobody had allowed, so the next method
+  call on a global set fatalled — on every page, since layouts read globals. The
+  addon now adds its own cached classes to that allow list, leaving the host's
+  entries and the unrestricted `null`/`true` settings untouched.
+- Custom query scopes now work on the tracking entry and term query builders.
+  Statamic keys its scope registry on the exact builder class, so a scope a site
+  registered against `Stache\Query\EntryQueryBuilder` was invisible to the
+  subclass this addon substitutes, and calling it fatally threw
+  `BadMethodCallException: Call to undefined method ...::yourScope()`. The
+  ordering was not a fluke: addons boot inside `$app->booted()`, so a site's own
+  `boot()` always registers its scopes before this addon rebinds the builder. A
+  scope registered against any ancestor of a tracking builder now applies to it.
+
+## [2.0.0] - 2026-08-06
+
+Invalidation is now derived from what pages actually read, instead of from rules
+describing what they might read. There is no configuration to write.
+
+The 1.x design kept a hand-maintained map of block types and field handles that
+had to mirror the templates. It drifted silently — a URL that no longer resolved
+invalidated nothing, and a relation rendered outside the `pagebuilder` field was
+invisible to the block index by construction. The template already knows what it
+renders; v2 observes it rather than restating it.
+
+### Added
+
+- A `url -> tags` dependency graph, recorded while a page renders and written when
+  it enters the static cache. Works identically on the `half` and `full`
+  strategies.
+- Read recording for entries, terms, globals and forms, hooked at the query
+  builder, repository and augmentation level rather than in templates.
+- Item tags versus list tags: a query pinned to ids records only those items, while
+  any other query also records its collection or taxonomy, so an entry created
+  later still invalidates listings that have never seen it.
+- Storage drivers: `sqlite` (default, owns its own connection and schema, needs no
+  database configured), `database` (opt-in, with a migration), and `null` (records
+  nothing, so every save clears everything).
+- A safety net: any cached URL absent from the graph is treated as depending on
+  everything. Covers pages cached before install, a lost graph, and recorder bugs,
+  so the failure mode is over-invalidation that heals after one render rather than
+  a page that stays stale with no symptom.
+- `cache-invalidation:why`, `:affected`, `:stats`, `:clear` and `:doctor`. `affected`
+  answers "what clears if I save this?" before saving — the question the 1.x design
+  could not be asked. `doctor` exits non-zero when invalidation cannot work, so a
+  broken environment fails a deploy.
+- `cache-invalidation:selftest`, which verifies the Statamic integration from inside
+  a site. Recording subclasses Statamic internals, several of them `protected` and
+  so outside semver, and the addon's own suite cannot run from a site because its
+  dev dependencies are never installed there. This checks each seam structurally by
+  reflection and behaviourally by recording against the site's own content, which is
+  the kind of break reflection cannot see. Read-only, skips checks the site has no
+  content for, and exits non-zero so it can gate a Statamic upgrade in CI.
+- An `X-Cache-Tags` header behind `CACHE_INVALIDATION_DEBUG`.
+- A public API for data this addon cannot observe — an HTTP call, a custom Eloquent
+  model, a file. `CacheTags::add()` (or `@cachetags(...)`) declares the dependency
+  where it is rendered, `CacheTags::invalidate()` clears it wherever that data
+  changes, and `cache-invalidation:clear` does the same from the command line.
+  Unlike a content save this does not sweep up untracked URLs, so a targeted call
+  stays targeted right after a deploy.
+- A test suite: 74 tests over Testbench, asserting recording through real queries
+  against real content and invalidation through real save events. Mutation-checked,
+  and verified to fail against the bugs it covers.
+
 ### Changed
 
-- Relicensed from proprietary to the MIT License. Copyright remains with Rox
-  Digital and the notice must be retained in redistributions, while the licence
-  disclaims all warranty and liability. `composer.json` now declares `MIT` and a
-  `LICENSE` file has been added.
+- The whole cache is no longer flushed for globals, navigations, form blueprints or
+  collection trees. URLs are invalidated individually, so `nocache` regions and the
+  graph survive.
+- Navigations are tagged where they render, so one used on a handful of pages clears
+  only those. A nav in the shared layout still reaches every page, but as a
+  consequence of where it is used rather than a special case.
+- Two kinds of read are excluded from recording, because both made almost every save
+  clear almost everything. Statamic's URL resolution, which for a structured
+  collection validates the whole collection tree; and navigation menus, where the
+  nav is recorded as `nav:{handle}` rather than as an `entry:` tag per menu item.
+
+  The navigation exclusion is a deliberate trade-off: renaming a page leaves its
+  menu label stale on already-cached pages until they clear for another reason, and
+  saving the navigation clears them. A page save clears where that page is rendered
+  as content.
+
+  Measured on a 215-page site: 31.9 tags per URL where recording everything gave
+  68.6, and a page save clears a median of 1 URL where before it cleared all of
+  them. 19 of 25 sampled pages clear 0–5 URLs. Saving a navigation clears all 215,
+  because all 215 render it.
+- Globals invalidate only where they are read. A set rendered in the layout still
+  reaches every page; one rendered by a single block reaches that block's pages.
+- Form blueprint saves clear the pages rendering that form instead of the entire
+  site.
+- The addon now claims Statamic's invalidator when the configured class is one of
+  its own, not only when the config is null. Sites pin it by name, and a 1.x pin
+  would otherwise fatal on a class that no longer exists.
+
+### Fixed
+
+- `Invalidator::refresh()` is honoured. `DefaultInvalidator` flips its `$refreshing`
+  flag before delegating to `invalidate()`, which 1.x overrode without checking, so
+  `statamic.static_caching.background_recache` hard-purged instead of refreshing.
+- Relations rendered outside the `pagebuilder` field — an entry's `author`,
+  `category`, a hero fieldset, entry links inside Bard — now invalidate. The 1.x
+  block index only read `$entry->get('pagebuilder')`, and the
+  `['collection' => …, 'field' => …]` rule existed to patch that hole by walking a
+  whole collection on every save.
+
+### Removed
+
+- Every rule key: `pagebuilder_collections`, `collection_entry_rules`,
+  `collection_urls`, `globals_flush_all`, `navs_flush_all`,
+  `collection_trees_flush_all`, `forms_flush_all`, `global_target_blocks`,
+  `global_urls`, `taxonomy_target_blocks`, `taxonomy_urls`.
+  `cache-invalidation:doctor` reports any still present in a published config.
+- The block index and its supporting classes, along with `customEntryUrls()`. The
+  relations that hook existed for are now observed.
 
 ## [1.2.0] - 2026-07-29
 
