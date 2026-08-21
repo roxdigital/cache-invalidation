@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- A host app whose `statamic.static_caching.invalidation.rules` is the string
+  `all` no longer fatals the moment static caching is switched on. Statamic
+  documents that value and checks for exactly it in
+  `DefaultInvalidator::invalidate()`, so a stock config hit
+  `TypeError: GraphInvalidator::__construct(): Argument #2 ($rules) must be of
+  type ?array, string given` during boot. Any non-array value is now normalised
+  to `[]`: `all` means flush everything on any save, which is precisely the
+  behaviour the graph replaces, so it must not reach the parent.
+- Globals no longer come back from the cache as `__PHP_Incomplete_Class`. Laravel
+  unserializes cache payloads against an allow list when
+  `cache.serializable_classes` holds an array, and Statamic fills that array with
+  its own classes. Binding `TrackingVariables` over the `Variables` contract meant
+  the globals store cached items of a class nobody had allowed, so the next method
+  call on a global set fatalled — on every page, since layouts read globals. The
+  addon now adds its own cached classes to that allow list, leaving the host's
+  entries and the unrestricted `null`/`true` settings untouched.
 - Custom query scopes now work on the tracking entry and term query builders.
   Statamic keys its scope registry on the exact builder class, so a scope a site
   registered against `Stache\Query\EntryQueryBuilder` was invisible to the

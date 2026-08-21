@@ -82,6 +82,7 @@ class ServiceProvider extends AddonServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/cache_invalidation.php', 'cache_invalidation');
 
         $this->fillMissingConfig();
+        $this->allowSerializationOfTrackingClasses();
         $this->registerSqliteConnection();
         $this->registerGraph();
         $this->registerRecorder();
@@ -104,6 +105,39 @@ class ServiceProvider extends AddonServiceProvider
         $this->registerReadRecorders();
 
         Blade::directive('cachetags', CacheTagsDirective::compile(...));
+    }
+
+    /**
+     * Let the tracking classes survive a round trip through the cache.
+     *
+     * Laravel unserializes cache payloads with an allowed_classes allow list when
+     * cache.serializable_classes holds an array, and Statamic fills that array with
+     * its own classes. Binding TrackingVariables over the Variables contract means
+     * the globals store caches items of a class nobody has allowed, so reading them
+     * back yields __PHP_Incomplete_Class and the next method call on a global set
+     * fatals — which is every page, since the footer reads globals.
+     *
+     * Only classes that actually reach the cache belong here. The repositories and
+     * query builders are resolved per request and never stored.
+     *
+     * Deliberately not calling Statamic's own registerSerializableClasses(): the
+     * semantics are three lines and doing it here keeps this working on 6.x
+     * releases that predate that helper.
+     */
+    private function allowSerializationOfTrackingClasses(): void
+    {
+        $existing = $this->app['config']->get('cache.serializable_classes');
+
+        // null and true both mean "no allow list", so there is nothing to add to.
+        if ($existing === null || $existing === true) {
+            return;
+        }
+
+        $this->app['config']->set('cache.serializable_classes', array_values(array_unique(
+            array_merge(is_array($existing) ? $existing : [], [
+                TrackingVariables::class,
+            ]),
+        )));
     }
 
     /**

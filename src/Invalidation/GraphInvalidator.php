@@ -38,16 +38,26 @@ final class GraphInvalidator extends DefaultInvalidator
 
     public function __construct(
         Cacher $cacher,
-        ?array $rules,
+        array|string|null $rules,
         private readonly DependencyGraph $graph,
         private readonly TagResolver $tags,
         private readonly CachedUrls $cached,
     ) {
-        // Nullable because $rules is resolved from config, and a host app whose
-        // static_caching config predates the invalidation.rules key — or sets it
-        // to null outright — would otherwise fatal on a TypeError. The rules
-        // themselves are unused; they exist so DefaultInvalidator stays satisfied.
-        parent::__construct($cacher, $rules ?? []);
+        // Widely typed because $rules is resolved from config and a host app may
+        // legitimately hold any of three shapes there. A config predating the
+        // invalidation.rules key, or setting it to null, arrives as null. And
+        // Statamic documents the string 'all' as a value in its own right —
+        // DefaultInvalidator::invalidate() checks for exactly that — so a stock
+        // config would otherwise fatal on a TypeError the moment static caching
+        // was switched on.
+        //
+        // Anything that is not an array becomes one. 'all' means "flush
+        // everything on any save", which is the behaviour the graph exists to
+        // replace: urls are invalidated individually instead. Passing it through
+        // would hand DefaultInvalidator a reason to flush the whole cache behind
+        // our back. The rules are unused either way; they exist so the parent
+        // stays satisfied.
+        parent::__construct($cacher, is_array($rules) ? $rules : []);
     }
 
     public function refresh($item): void
