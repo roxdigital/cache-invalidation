@@ -1,11 +1,16 @@
 {
   "name": "roxdigital/cache-invalidation",
-  "description": "Configurable Statamic static/half cache invalidation for pagebuilder-driven sites.",
+  "description": "Zero-config Statamic static cache invalidation, driven by what pages actually read.",
   "type": "statamic-addon",
   "license": "MIT",
   "autoload": {
     "psr-4": {
       "RoxDigital\\CacheInvalidation\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "RoxDigital\\CacheInvalidation\\Tests\\": "tests/"
     }
   },
   "extra": {
@@ -16,13 +21,24 @@
     },
     "statamic": {
       "name": "Cache Invalidation",
-      "description": "Configurable static/half cache invalidation for pagebuilder-driven sites."
+      "description": "Zero-config static cache invalidation, driven by what pages actually read."
     }
   },
   "require": {
     "laravel/framework": "^12.0 || ^13.0",
     "php": "^8.4",
     "statamic/cms": "^6.0"
+  },
+  "require-dev": {
+    "mockery/mockery": "^1.6.10",
+    "orchestra/testbench": "^10.8 || ^11.0",
+    "phpunit/phpunit": "^12.5"
+  },
+  "scripts": {
+    "test": "phpunit"
+  },
+  "config": {
+    "sort-packages": true
   },
   "minimum-stability": "dev",
   "prefer-stable": true

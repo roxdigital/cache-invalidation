@@ -6,172 +6,69 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Pagebuilder collections
+    | Dependency graph driver
     |--------------------------------------------------------------------------
     |
-    | Only entries from these collections are scanned when determining which
-    | cached page URLs to clear. List collections whose entries have a
-    | pagebuilder replicator field.
+    | Invalidation is driven by a url -> tags graph recorded while pages render.
+    | The graph has to share a lifetime with the static cache and be visible to
+    | every process that writes or clears it. If the cache outlives the graph,
+    | lookups stop matching and pages go stale; if web and worker processes see
+    | different copies, invalidation clears nothing.
+    |
+    | Supported drivers:
+    |
+    | "sqlite"   Default. Needs nothing from the host app: the addon registers
+    |            its own connection and creates the file on first write, so it
+    |            works on sites with no DB_CONNECTION configured. Correct for
+    |            single-server deploys, which is where a file-backed static
+    |            cache works in the first place.
+    |
+    | "database" Uses the application's database. Pick this when the app already
+    |            has one and you would rather keep the graph there. Requires
+    |            `php artisan migrate`.
+    |
+    | "null"     Records nothing. Every invalidation then falls back to clearing
+    |            any cached URL the graph does not know about, which means the
+    |            whole cache. Useful to rule the addon out while debugging.
     |
     */
 
-    'pagebuilder_collections' => [
-        'pages',
-    ],
+    'driver' => env('CACHE_INVALIDATION_DRIVER', 'sqlite'),
 
     /*
     |--------------------------------------------------------------------------
-    | Globals that flush the entire static cache
+    | Sqlite driver path
     |--------------------------------------------------------------------------
     |
-    | Use this for globals rendered in shared layout or SEO output.
+    | Kept next to Statamic's own static cache bookkeeping so the graph and the
+    | cache share a directory, and a deploy that discards one discards both.
     |
     */
 
-    'globals_flush_all' => [
-        'redirects',
-    ],
+    'sqlite_path' => storage_path('statamic/cache-invalidation.sqlite'),
 
     /*
     |--------------------------------------------------------------------------
-    | Navigations that flush the entire static cache
+    | Database driver connection
     |--------------------------------------------------------------------------
+    |
+    | Null uses the application's default connection.
+    |
     */
 
-    'navs_flush_all' => [
-        'navigation',
-    ],
+    'database_connection' => null,
 
     /*
     |--------------------------------------------------------------------------
-    | Collection trees that flush the entire static cache
+    | Debug
     |--------------------------------------------------------------------------
     |
-    | Saving a collection tree always clears the block index, because a move
-    | changes entry URLs and the index is keyed on them. List a collection here
-    | as well when its tree drives shared output — a nav or breadcrumbs built
-    | from the page tree, say — since reordering it changes every cached page
-    | and no block rule can express that. Empty by default.
+    | Adds an X-Cache-Tags header to responses that are about to be cached, so
+    | you can read a page's recorded dependencies in devtools. Cached hits do
+    | not carry the header — the render that produced the cache entry does.
     |
     */
 
-    'collection_trees_flush_all' => [
-        //
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Flush the entire static cache when a form blueprint is saved
-    |--------------------------------------------------------------------------
-    |
-    | A form blueprint change alters the fields rendered by every page that
-    | embeds that form, and those pages cannot be resolved from the block
-    | index, so the whole cache is flushed.
-    |
-    */
-
-    'forms_flush_all' => true,
-
-    /*
-    |--------------------------------------------------------------------------
-    | Globals that target pagebuilder block types
-    |--------------------------------------------------------------------------
-    |
-    | Format: 'global_handle' => ['block_type', ...]
-    |
-    */
-
-    'global_target_blocks' => [
-        //
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Globals that clear explicit URLs
-    |--------------------------------------------------------------------------
-    |
-    | Format: 'global_handle' => ['/url', ...]
-    |
-    */
-
-    'global_urls' => [
-        //
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Collection entry rules
-    |--------------------------------------------------------------------------
-    |
-    | Rule without field: ['block' => 'block_type']
-    | Rule with field: ['block' => 'block_type', 'field' => 'field_handle']
-    | Flush all cached URLs for a collection: 'collection' => 'all'
-    |
-    | The two rules above resolve pages through the block index, so they only
-    | reach what a pagebuilder block renders. For relations rendered by a
-    | collection's own template there are two more:
-    |
-    | Parent page: ['parent' => true]
-    |     Clears the saved entry's parent page. For a structured collection
-    |     whose parent template lists its children.
-    |     Opt-in per collection, not automatic: in a collection mounted at the
-    |     site root a top-level entry's parent is the root itself, so applying
-    |     this everywhere would clear the home page on every save.
-    |
-    | Referencing entries: ['collection' => 'handle', 'field' => 'field_handle']
-    |     Clears the URL of every entry in that collection whose field
-    |     references the saved entry — the inverse of a block rule. Use it when
-    |     the referencing markup is in a template rather than a block, e.g. an
-    |     article detail page rendering its author from the employees
-    |     collection.
-    |     This walks the named collection on each save of the source
-    |     collection, so keep an eye on it for very large collections.
-    |
-    */
-
-    'collection_entry_rules' => [
-        'reusable_blocks' => [
-            ['block' => 'reusable_block', 'field' => 'entry'],
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Collections that clear explicit URLs
-    |--------------------------------------------------------------------------
-    |
-    | Format: 'collection_handle' => ['/overview', ...]
-    |
-    */
-
-    'collection_urls' => [
-        //
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Taxonomies that target pagebuilder block types
-    |--------------------------------------------------------------------------
-    |
-    | Format: 'taxonomy_handle' => ['block_type', ...]
-    |
-    */
-
-    'taxonomy_target_blocks' => [
-        //
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Taxonomies that clear explicit URLs
-    |--------------------------------------------------------------------------
-    |
-    | Format: 'taxonomy_handle' => ['/overview', ...]
-    |
-    */
-
-    'taxonomy_urls' => [
-        //
-    ],
+    'debug' => env('CACHE_INVALIDATION_DEBUG', false),
 
 ];
