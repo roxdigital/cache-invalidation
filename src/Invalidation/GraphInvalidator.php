@@ -81,12 +81,43 @@ final class GraphInvalidator extends DefaultInvalidator
     public function invalidate($item): void
     {
         $tags = $this->tags->forItem($item);
+        $cached = $this->cached->all();
 
         $this->clear([
             ...$this->getItemUrls($item),
-            ...$tags === [] ? [] : $this->graph->urlsFor([...$tags, Tag::OVERFLOW]),
-            ...$this->graph->untracked($this->cached->all()),
+            ...$tags === [] ? [] : $this->stillCached($this->graph->urlsFor([...$tags, Tag::OVERFLOW]), $cached),
+            ...$this->graph->untracked($cached),
         ]);
+    }
+
+    /**
+     * The graph outlives the cache: a URL keeps its row after its cached copy is
+     * gone, and rows are only pruned as they are invalidated. On a site that has
+     * been up for a while most of what a tag resolves to is no longer cached —
+     * often two thirds of it — and every one of those costs the cacher a lookup
+     * that can only miss. Narrowing here is what makes the remaining work match
+     * the number of pages that actually have to be cleared.
+     *
+     * Deliberately not applied to getItemUrls(): those are Statamic's own, may be
+     * wildcards, and are not graph rows to begin with.
+     *
+     * @param  list<string>  $urls
+     * @param  list<string>  $cached
+     * @return list<string>
+     */
+    private function stillCached(array $urls, array $cached): array
+    {
+        // An empty list is ambiguous. It means "nothing is cached" on a site that
+        // was just flushed, but it equally means "this cacher cannot be
+        // enumerated" — CachedUrls gives up on anything that is not an
+        // AbstractCacher, which includes a host app's own cacher. Narrowing
+        // against it would then clear nothing at all, the one failure this addon
+        // exists to prevent. Hand the full set over and let the cacher decide.
+        if ($cached === []) {
+            return $urls;
+        }
+
+        return array_values(array_intersect($urls, $cached));
     }
 
     /**

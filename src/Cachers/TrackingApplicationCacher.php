@@ -11,5 +11,6 @@ use Statamic\StaticCaching\Cachers\ApplicationCacher;
  */
 final class TrackingApplicationCacher extends ApplicationCacher
 {
+    use BatchesInvalidation;
     use RecordsDependencies;
 }

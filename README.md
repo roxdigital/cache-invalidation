@@ -353,9 +353,10 @@ listed so you know where the edges are.
 
 ## Good to know
 
-- Invalidation is one indexed lookup plus the deletes. Nothing walks content, which
-  matters with a single queue worker or `QUEUE_CONNECTION=sync`, where it runs inside
-  the editor's save request.
+- Invalidation is one indexed lookup plus the deletes, and the URL map Statamic keeps
+  per domain is read and written once per pass rather than once per URL cleared.
+  Nothing walks content, which matters with a single queue worker or
+  `QUEUE_CONNECTION=sync`, where it runs inside the editor's save request.
 - A page with more than 2,000 dependencies is treated as depending on everything.
 - Globals are not scoped per site, so on a multisite install saving one clears the
   pages that read it across every site.

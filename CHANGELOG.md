@@ -2,36 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
-### Fixed
-
-- A host app whose `statamic.static_caching.invalidation.rules` is the string
-  `all` no longer fatals the moment static caching is switched on. Statamic
-  documents that value and checks for exactly it in
-  `DefaultInvalidator::invalidate()`, so a stock config hit
-  `TypeError: GraphInvalidator::__construct(): Argument #2 ($rules) must be of
-  type ?array, string given` during boot. Any non-array value is now normalised
-  to `[]`: `all` means flush everything on any save, which is precisely the
-  behaviour the graph replaces, so it must not reach the parent.
-- Globals no longer come back from the cache as `__PHP_Incomplete_Class`. Laravel
-  unserializes cache payloads against an allow list when
-  `cache.serializable_classes` holds an array, and Statamic fills that array with
-  its own classes. Binding `TrackingVariables` over the `Variables` contract meant
-  the globals store cached items of a class nobody had allowed, so the next method
-  call on a global set fatalled — on every page, since layouts read globals. The
-  addon now adds its own cached classes to that allow list, leaving the host's
-  entries and the unrestricted `null`/`true` settings untouched.
-- Custom query scopes now work on the tracking entry and term query builders.
-  Statamic keys its scope registry on the exact builder class, so a scope a site
-  registered against `Stache\Query\EntryQueryBuilder` was invisible to the
-  subclass this addon substitutes, and calling it fatally threw
-  `BadMethodCallException: Call to undefined method ...::yourScope()`. The
-  ordering was not a fluke: addons boot inside `$app->booted()`, so a site's own
-  `boot()` always registers its scopes before this addon rebinds the builder. A
-  scope registered against any ancestor of a tracking builder now applies to it.
-
-## [2.0.0] - 2026-08-06
+## [2.0.0] - 2026-09-15
 
 Invalidation is now derived from what pages actually read, instead of from rules
 describing what they might read. There is no configuration to write.
@@ -113,6 +84,52 @@ renders; v2 observes it rather than restating it.
 
 ### Fixed
 
+- A save no longer leaves pages stale when it clears a large number of URLs.
+  Statamic keeps one URL map per domain and rewrites all of it for every URL it
+  clears, so invalidating n URLs out of a map of m cost O(n*m). On a site with a
+  few thousand cached URLs that is a few hundred kilobytes rewritten thousands of
+  times per save, each write taking an exclusive lock that live traffic is
+  contending for on every uncached render. The queued
+  `Statamic\StaticCaching\Invalidate` job ran past its timeout and was killed
+  part-way through the list, so every URL it had not reached yet went on serving
+  the old page. Nothing said so: the only trace was a `TimeoutExceededException`
+  in `failed_jobs`, while the editor saw a saved entry that never appeared. The
+  map is now read once and written once per domain actually touched, whatever the
+  size of the batch — Statamic's own matching, response deletion and events are
+  left exactly as they are. The `full` strategy still scans its cache directory
+  once per URL, which is Statamic's own `FileCacher` and unchanged here.
+- Invalidation no longer hands the cacher URLs that are not cached any more. The
+  graph outlives the cache by design — rows are pruned as they are invalidated,
+  not when a page falls out — so on a site that has been up for a while a tag
+  routinely resolves to two or three times as many URLs as the cache holds, and
+  every one of those costs a lookup that can only miss. They are now filtered out
+  before the cacher sees them. A cacher whose contents cannot be enumerated still
+  receives the full set: an empty list there means "unknown", not "nothing is
+  cached", and narrowing against it would clear nothing at all.
+- A host app whose `statamic.static_caching.invalidation.rules` is the string
+  `all` no longer fatals the moment static caching is switched on. Statamic
+  documents that value and checks for exactly it in
+  `DefaultInvalidator::invalidate()`, so a stock config hit
+  `TypeError: GraphInvalidator::__construct(): Argument #2 ($rules) must be of
+  type ?array, string given` during boot. Any non-array value is now normalised
+  to `[]`: `all` means flush everything on any save, which is precisely the
+  behaviour the graph replaces, so it must not reach the parent.
+- Globals no longer come back from the cache as `__PHP_Incomplete_Class`. Laravel
+  unserializes cache payloads against an allow list when
+  `cache.serializable_classes` holds an array, and Statamic fills that array with
+  its own classes. Binding `TrackingVariables` over the `Variables` contract meant
+  the globals store cached items of a class nobody had allowed, so the next method
+  call on a global set fatalled — on every page, since layouts read globals. The
+  addon now adds its own cached classes to that allow list, leaving the host's
+  entries and the unrestricted `null`/`true` settings untouched.
+- Custom query scopes now work on the tracking entry and term query builders.
+  Statamic keys its scope registry on the exact builder class, so a scope a site
+  registered against `Stache\Query\EntryQueryBuilder` was invisible to the
+  subclass this addon substitutes, and calling it fatally threw
+  `BadMethodCallException: Call to undefined method ...::yourScope()`. The
+  ordering was not a fluke: addons boot inside `$app->booted()`, so a site's own
+  `boot()` always registers its scopes before this addon rebinds the builder. A
+  scope registered against any ancestor of a tracking builder now applies to it.
 - `Invalidator::refresh()` is honoured. `DefaultInvalidator` flips its `$refreshing`
   flag before delegating to `invalidate()`, which 1.x overrode without checking, so
   `statamic.static_caching.background_recache` hard-purged instead of refreshing.
