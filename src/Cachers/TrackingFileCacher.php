@@ -11,5 +11,6 @@ use Statamic\StaticCaching\Cachers\FileCacher;
  */
 final class TrackingFileCacher extends FileCacher
 {
+    use BatchesInvalidation;
     use RecordsDependencies;
 }
