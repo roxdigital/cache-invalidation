@@ -22,6 +22,18 @@ final class CachedUrls
     ) {}
 
     /**
+     * Whether the configured cacher can enumerate what it holds at all.
+     *
+     * Matters to anything that treats all() as the whole truth: a cacher that
+     * cannot enumerate returns an empty list, which is indistinguishable from an
+     * empty cache and would make a pruner delete the entire graph.
+     */
+    public function supported(): bool
+    {
+        return $this->cacher instanceof AbstractCacher;
+    }
+
+    /**
      * @return list<string>
      */
     public function all(): array

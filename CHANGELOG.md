@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-09-22
+
+### Added
+
+- `CacheTags::withoutRecording()`, for navigation and other shared-layout
+  furniture a site assembles in its own PHP. Statamic's `{{ nav }}` tag was
+  already recorded as the navigation rather than as every entry in it; a menu
+  built by hand had no equivalent, so each of its entries became a dependency of
+  every page carrying it.
+- `cache-invalidation:prune`, which drops graph rows for URLs that are no longer
+  in the static cache. Nothing removed them before — rows are only ever replaced
+  by rendering the same URL again — so the graph grew without bound.
+
+### Fixed
+
+- The sqlite graph now reclaims its file. `DELETE` moves pages onto sqlite's
+  freelist without shortening the file, and under WAL a `VACUUM` alone is not
+  enough either, so a graph that had been large once stayed large on disk: one
+  site was carrying a 251 MB file holding 18 MB of rows. Flushing and pruning
+  now `VACUUM` and checkpoint.
+
 ## [2.0.0] - 2026-09-15
 
 Invalidation is now derived from what pages actually read, instead of from rules

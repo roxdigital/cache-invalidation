@@ -103,6 +103,43 @@ abstract class SqlGraph implements DependencyGraph
         return $this->query()->distinct()->orderBy('url')->pluck('url')->all();
     }
 
+    public function prune(array $keepUrls): int
+    {
+        $keep = [];
+
+        foreach ($keepUrls as $url) {
+            $keep[$this->hash($url)] = true;
+        }
+
+        // Worked out in PHP rather than as a NOT IN, because chunking a NOT IN
+        // would make each chunk delete everything the other chunks kept.
+        $stale = [];
+
+        foreach ($this->query()->distinct()->pluck('url_hash') as $hash) {
+            if (! isset($keep[$hash])) {
+                $stale[] = $hash;
+            }
+        }
+
+        if ($stale === []) {
+            return 0;
+        }
+
+        $removed = 0;
+
+        foreach (array_chunk($stale, self::CHUNK) as $chunk) {
+            $removed += $this->query()->whereIn('url_hash', $chunk)->delete();
+        }
+
+        return $removed;
+    }
+
+    /**
+     * A server-backed database reuses freed pages itself, so there is nothing
+     * useful to do here. SQLite overrides this.
+     */
+    public function compact(): void {}
+
     public function flush(): void
     {
         $this->query()->delete();

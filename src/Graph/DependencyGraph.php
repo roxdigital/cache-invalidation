@@ -54,6 +54,30 @@ interface DependencyGraph
      */
     public function urls(): array;
 
+    /**
+     * Drop every URL that is not in the given set, and the rows behind it.
+     *
+     * The graph only ever learns about a URL by rendering it, so nothing removes
+     * a URL that quietly fell out of the static cache. Left alone the graph grows
+     * without bound, and `untracked()` pays for rows describing pages that are
+     * no longer cached. Callers pass the URLs that are currently cached; anything
+     * else is garbage.
+     *
+     * @param  list<string>  $keepUrls
+     * @return int  Rows removed.
+     */
+    public function prune(array $keepUrls): int;
+
+    /**
+     * Reclaim storage freed by prune() or flush().
+     *
+     * Separate from both because it is the expensive half: SQLite's DELETE only
+     * moves pages onto the freelist, so a graph that has been flushed keeps its
+     * old size on disk for ever. A no-op for drivers that manage their own
+     * storage.
+     */
+    public function compact(): void;
+
     public function flush(): void;
 
     /**

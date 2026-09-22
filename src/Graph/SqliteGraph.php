@@ -39,6 +39,32 @@ final class SqliteGraph extends SqlGraph
     }
 
     /**
+     * SQLite's DELETE moves pages onto the freelist and never shortens the file,
+     * so a graph that has been flushed or pruned keeps the size of its largest
+     * ever state. Left alone a busy site ends up with a file that is almost
+     * entirely free pages, and every query still walks it.
+     *
+     * VACUUM rewrites the file around the rows that remain. It cannot run inside
+     * a transaction, hence the guard.
+     */
+    public function compact(): void
+    {
+        $connection = $this->connection();
+
+        if ($connection->transactionLevel() > 0) {
+            return;
+        }
+
+        $connection->statement('VACUUM');
+
+        // The connection runs in WAL mode (see ServiceProvider), where VACUUM
+        // rewrites the database inside the write-ahead log. Without a truncating
+        // checkpoint the main file keeps its old length on disk, so nothing has
+        // actually been reclaimed.
+        $connection->select('PRAGMA wal_checkpoint(TRUNCATE)');
+    }
+
+    /**
      * Runs once per process. CREATE ... IF NOT EXISTS rather than a migration so
      * that installing the addon requires no artisan step.
      */

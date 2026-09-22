@@ -9,6 +9,7 @@ use RoxDigital\CacheInvalidation\CacheTags as Manager;
 
 /**
  * @method static void add(string ...$tags)
+ * @method static mixed withoutRecording(callable $callback)
  * @method static int invalidate(string ...$tags)
  * @method static list<string> urlsFor(string ...$tags)
  *

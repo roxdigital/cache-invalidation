@@ -15,6 +15,7 @@ use RoxDigital\CacheInvalidation\Cachers\TrackingFileCacher;
 use RoxDigital\CacheInvalidation\Console\AffectedCommand;
 use RoxDigital\CacheInvalidation\Console\ClearCommand;
 use RoxDigital\CacheInvalidation\Console\DoctorCommand;
+use RoxDigital\CacheInvalidation\Console\PruneCommand;
 use RoxDigital\CacheInvalidation\Console\SelfTestCommand;
 use RoxDigital\CacheInvalidation\Console\StatsCommand;
 use RoxDigital\CacheInvalidation\Console\WhyCommand;
@@ -60,6 +61,7 @@ class ServiceProvider extends AddonServiceProvider
         AffectedCommand::class,
         ClearCommand::class,
         DoctorCommand::class,
+        PruneCommand::class,
         SelfTestCommand::class,
         StatsCommand::class,
         WhyCommand::class,

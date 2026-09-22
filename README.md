@@ -158,6 +158,10 @@ php artisan cache-invalidation:stats
 # preview with that, clear with this.
 php artisan cache-invalidation:clear api:reviews
 
+# Drop graph rows for URLs that are no longer cached, and shrink the
+# sqlite file to fit. Safe to schedule; --dry-run reports first.
+php artisan cache-invalidation:prune
+
 # Deploy check — exits non-zero when invalidation cannot work.
 php artisan cache-invalidation:doctor
 
@@ -167,6 +171,48 @@ php artisan cache-invalidation:selftest
 
 `CACHE_INVALIDATION_DEBUG=true` adds an `X-Cache-Tags` header as pages are cached,
 so you can read a page's dependencies in devtools.
+
+## Navigation you build yourself
+
+Statamic's `{{ nav }}` tag is handled already: the addon records the navigation
+itself rather than every entry in it, so renaming a menu item does not clear the
+whole site.
+
+A menu assembled in your own PHP has no such treatment, and every entry it reads
+becomes a dependency of every page carrying it. Wrap it:
+
+```php
+use RoxDigital\CacheInvalidation\Facades\CacheTags;
+
+CacheTags::add('nav:main');
+
+$menu = CacheTags::withoutRecording(fn () => $this->buildMenu());
+```
+
+Saving the navigation now clears the pages that render it; saving one page it
+links to does not. The same applies to any furniture in a shared layout built
+from content — a footer, a "latest posts" strip.
+
+The trade-off is deliberate: that menu item keeps its old title on already-cached
+pages until something clears them. `cache-invalidation:why` on any page shows
+whether the treatment took, since the per-entry tags disappear.
+
+## Keeping the graph bounded
+
+The graph only learns about a URL by rendering it, so nothing removes a URL that
+quietly falls out of the static cache. Over months the graph comes to describe
+mostly pages that are no longer cached.
+
+`cache-invalidation:stats` reports the gap. When it grows, prune:
+
+```php
+// routes/console.php
+Schedule::command('cache-invalidation:prune')->weekly();
+```
+
+On sqlite this also reclaims the file. Deleting rows alone moves pages onto
+sqlite's freelist and never shortens the file, so a graph that has been large
+once stays large on disk; pruning and flushing both `VACUUM` afterwards.
 
 ## Configuration
 

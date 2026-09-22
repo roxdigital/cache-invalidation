@@ -27,5 +27,11 @@ final class ClearGraphWhenCacheCleared
     public function handle(StaticCacheCleared $event): void
     {
         $this->graph->flush();
+
+        // The DELETE alone leaves a SQLite file the size of the graph at its
+        // largest, which is how a site that has been running for months ends up
+        // with a mostly empty multi-hundred-megabyte file. This is the one moment
+        // the graph is known to be empty, so compacting is at its cheapest.
+        $this->graph->compact();
     }
 }
