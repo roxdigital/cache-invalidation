@@ -43,6 +43,31 @@ final class CacheTags
     }
 
     /**
+     * Run a callback without recording anything it reads.
+     *
+     * For page furniture that is built out of content but is not the page's
+     * content: a navigation, a footer, a "latest posts" strip in the shared
+     * layout. Left alone, every entry those touch becomes a dependency of every
+     * page that carries them, so renaming one menu item clears the whole site.
+     *
+     * Pair it with add() to leave a single honest dependency in its place:
+     *
+     *     CacheTags::add('nav:main');
+     *
+     *     $menu = CacheTags::withoutRecording(fn () => $this->buildMenu());
+     *
+     * Saving the navigation then clears the pages that render it, while saving
+     * one page it links to does not. The trade-off is deliberate: that menu item
+     * shows its old title on already-cached pages until they are cleared for some
+     * other reason. Statamic's own {{ nav }} tag is handled this way internally;
+     * this is for navigation a site builds itself.
+     */
+    public function withoutRecording(callable $callback): mixed
+    {
+        return $this->recorder->suppressed($callback);
+    }
+
+    /**
      * Clear every cached URL carrying any of the given tags.
      *
      * Returns the number of URLs cleared.

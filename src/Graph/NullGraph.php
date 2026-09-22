@@ -39,6 +39,13 @@ final class NullGraph implements DependencyGraph
         return [];
     }
 
+    public function prune(array $keepUrls): int
+    {
+        return 0;
+    }
+
+    public function compact(): void {}
+
     public function flush(): void {}
 
     public function stats(): array
