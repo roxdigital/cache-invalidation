@@ -61,4 +61,23 @@ final class Tag
     {
         return 'nav:'.$handle;
     }
+
+    /**
+     * Keyed on the asset id, "{container}::{path}", which is also what Bard and
+     * the asset fieldtype store. A move or rename changes it; the invalidator
+     * covers that by resolving the original path as well.
+     */
+    public static function asset(string $id): string
+    {
+        return 'asset:'.$id;
+    }
+
+    /**
+     * The list tag for assets: a page that queried a container for whatever it
+     * holds rather than for specific paths.
+     */
+    public static function assetContainer(string $handle): string
+    {
+        return 'asset-container:'.$handle;
+    }
 }

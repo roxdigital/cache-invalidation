@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace RoxDigital\CacheInvalidation\Tests\Invalidation;
 
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\Test;
 use RoxDigital\CacheInvalidation\Tag;
 use RoxDigital\CacheInvalidation\Tests\TestCase;
+use Statamic\Facades\Asset;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Form;
@@ -241,6 +244,51 @@ final class InvalidatesByDependencyTest extends TestCase
         $this->assertSame([], $this->graph->urls());
     }
 
+    #[Test]
+    public function setting_a_focal_point_clears_pages_that_rendered_the_asset(): void
+    {
+        // The reported case: a focal point lives in the asset's meta, not in the
+        // entry, so no entry save ever reaches the page. The crop is baked into
+        // the glide URL in the cached HTML, which therefore went stale.
+        $this->assetContainer(['hero.txt', 'other.txt']);
+
+        $this->cache('/uses-it', ['asset:test::hero.txt']);
+        $this->cache('/unrelated', ['asset:test::other.txt']);
+
+        Asset::find('test::hero.txt')->set('focus', '20-30-1')->save();
+
+        $this->assertCachedIs(['/unrelated']);
+    }
+
+    #[Test]
+    public function moving_an_asset_clears_pages_that_rendered_it_under_its_old_path(): void
+    {
+        $this->assetContainer(['hero.txt', 'other.txt']);
+
+        $this->cache('/uses-it', ['asset:test::hero.txt']);
+        $this->cache('/unrelated', ['asset:test::other.txt']);
+
+        Asset::find('test::hero.txt')->rename('renamed');
+
+        $this->assertCachedIs(['/unrelated']);
+    }
+
+    #[Test]
+    public function uploading_an_asset_clears_pages_that_listed_its_container(): void
+    {
+        // A new asset is in no recorded tag set yet, the same reason entries have
+        // a collection tag.
+        $this->assetContainer(['existing.txt']);
+
+        $this->cache('/gallery', ['asset-container:test']);
+        $this->cache('/detail', ['asset:test::existing.txt']);
+
+        Storage::disk('test')->put('new.txt', 'new');
+        AssetContainer::find('test')->makeAsset('new.txt')->save();
+
+        $this->assertCachedIs(['/detail']);
+    }
+
     private function article(string $slug): \Statamic\Contracts\Entries\Entry
     {
         return tap(Entry::make()->collection('articles')->slug($slug)->data(['title' => ucfirst($slug)]))->save();
@@ -253,6 +301,23 @@ final class InvalidatesByDependencyTest extends TestCase
     {
         $set = tap(GlobalSet::make($handle))->save();
         $set->makeLocalization('default')->data($data)->save();
+    }
+
+    /**
+     * Text files rather than images: an uploaded image triggers glide preset
+     * generation, which has nothing to do with invalidation and needs real pixels.
+     *
+     * @param  list<string>  $files
+     */
+    private function assetContainer(array $files): void
+    {
+        Storage::fake('test');
+
+        foreach ($files as $file) {
+            Storage::disk('test')->put($file, $file);
+        }
+
+        AssetContainer::make('test')->disk('test')->save();
     }
 
     /**

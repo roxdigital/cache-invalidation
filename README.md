@@ -57,6 +57,7 @@ https://site.test/over-ons
   term:departments::sales
   global:footer
   form:contact
+  asset:assets::team/ada.jpg
 ```
 
 On save, the changed item is turned into the same tags and every URL carrying one
@@ -86,6 +87,7 @@ changes, and there is no scanning or parsing.
 | Terms | `TermQueryBuilder`, via a replaced `TermRepository::query()` |
 | Globals | `Variables::newAugmentedInstance()`, on first value read |
 | Forms | `FormRepository::find()` |
+| Assets | `Assets\QueryBuilder::getFilteredKeys()` and `getItems()`; `AssetRepository::findById()` and `findByUrl()` |
 | Navigations | `NavigationRepository`, `NavTreeRepository`, and the `nav` tag |
 
 Entries hook `getFilteredKeys()` rather than `get()` because `count()` and
@@ -112,6 +114,7 @@ cached hit never reaches it.
 | Form or forms blueprint | Pages rendering that form |
 | Collection tree | Pages carrying that collection's list tag, plus the URLs Statamic reports as moved |
 | Navigation | Pages that render it — every page, if it is in your layout |
+| Asset (focal point, alt text, replaced file, move) | Pages carrying `asset:{container}::{path}` under its new or old path, pages carrying `asset-container:{handle}` |
 
 The cache is never flushed wholesale — URLs are invalidated individually, so
 `nocache` regions survive and pages come back without a global re-render. Nothing
@@ -147,7 +150,7 @@ deploy that is every page; it drops to zero as pages render.
 php artisan cache-invalidation:why https://site.test/over-ons
 
 # What would clear if I saved this? Takes an entry id, term id,
-# global handle, form handle, or a raw tag.
+# asset id, global handle, form handle, or a raw tag.
 php artisan cache-invalidation:affected 9f2c1b4e-…
 php artisan cache-invalidation:affected collection:articles
 
@@ -385,11 +388,6 @@ Statamic only dispatches invalidation events for content, and only some of it, s
 few changes clear nothing. None of these are silent in a surprising way — they are
 listed so you know where the edges are.
 
-- **Assets.** Replacing an image or setting a focal point in the asset browser clears
-  nothing on its own. `AssetSaved` reaches the invalidator, but asset reads are not
-  recorded, so there is no tag to match. In practice this rarely bites: assets are
-  normally changed while working on a page, and saving that page clears it. Save the
-  page if you edited an asset in isolation.
 - **Blueprints and fieldsets outside forms.** Adding a field to a collection
   blueprint can change every page of that collection; Statamic only routes the
   `forms` namespace to invalidation.

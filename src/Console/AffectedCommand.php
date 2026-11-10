@@ -9,6 +9,7 @@ use RoxDigital\CacheInvalidation\CachedUrls;
 use RoxDigital\CacheInvalidation\Graph\DependencyGraph;
 use RoxDigital\CacheInvalidation\Invalidation\TagResolver;
 use RoxDigital\CacheInvalidation\Tag;
+use Statamic\Facades\Asset;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
@@ -22,7 +23,7 @@ use Statamic\Facades\Term;
 final class AffectedCommand extends Command
 {
     protected $signature = 'cache-invalidation:affected
-        {item : An entry id, term id, global set handle, form handle, or a raw tag}';
+        {item : An entry id, term id, asset id, global set handle, form handle, or a raw tag}';
 
     protected $description = 'Show which cached URLs would clear if the given item were saved';
 
@@ -33,7 +34,7 @@ final class AffectedCommand extends Command
         [$label, $tags] = $this->resolve($item, $resolver);
 
         if ($tags === []) {
-            $this->components->error("Could not resolve [{$item}] to an entry, term, global set, form or tag.");
+            $this->components->error("Could not resolve [{$item}] to an entry, term, asset, global set, form or tag.");
 
             return self::FAILURE;
         }
@@ -80,6 +81,13 @@ final class AffectedCommand extends Command
 
         if ($term = Term::find($item)) {
             return ["term: {$term->taxonomyHandle()}/{$term->slug()}", $resolver->forItem($term)];
+        }
+
+        // Asset ids share the "{handle}::{rest}" shape with term ids, so this comes
+        // after terms. Guarded on the separator: without it Asset::find() treats
+        // the argument as a URL and starts resolving containers.
+        if (str_contains($item, '::') && ($asset = Asset::find($item))) {
+            return ["asset: {$asset->id()}", $resolver->forItem($asset)];
         }
 
         if ($set = GlobalSet::find($item)) {

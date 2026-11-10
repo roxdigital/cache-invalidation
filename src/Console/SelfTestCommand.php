@@ -108,6 +108,9 @@ final class SelfTestCommand extends Command
             \Statamic\Globals\Variables::class => ['newAugmentedInstance'],
             \Statamic\Globals\AugmentedVariables::class => ['get'],
             \Statamic\Forms\FormRepository::class => ['find'],
+            \Statamic\Assets\QueryBuilder::class => ['getFilteredKeys', 'getItems'],
+            \Statamic\Assets\AssetRepository::class => ['findById', 'findByUrl', 'query'],
+            \Statamic\Assets\Asset::class => ['getOriginal'],
             \Statamic\Tags\Nav::class => ['structure'],
             \Statamic\StaticCaching\Cachers\ApplicationCacher::class => ['cachePage'],
             \Statamic\StaticCaching\Cachers\FileCacher::class => ['cachePage'],
@@ -119,6 +122,7 @@ final class SelfTestCommand extends Command
         $properties = [
             \Statamic\Stache\Query\EntryQueryBuilder::class => ['collections'],
             \Statamic\Stache\Query\TermQueryBuilder::class => ['taxonomies'],
+            \Statamic\Assets\QueryBuilder::class => ['container'],
             \Statamic\Query\Builder::class => ['wheres'],
             \Statamic\Stache\Repositories\TermRepository::class => ['store'],
         ];
