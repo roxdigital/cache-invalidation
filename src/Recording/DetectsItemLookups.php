@@ -48,6 +48,18 @@ trait DetectsItemLookups
      */
     private const BOUNDING_TYPES = ['Basic', 'In'];
 
+    /**
+     * Overridable rather than read straight from the constant, because what
+     * identifies an item depends on what is being queried. A class cannot
+     * redeclare a trait constant with a different value.
+     *
+     * @return list<string>
+     */
+    protected function identifyingColumns(): array
+    {
+        return self::IDENTIFYING_COLUMNS;
+    }
+
     protected function isItemLookup(): bool
     {
         // An empty where clause is emphatically not an item lookup: "everything in
@@ -76,7 +88,7 @@ trait DetectsItemLookups
      */
     private function boundsResults(array $where): bool
     {
-        if (! in_array($where['column'] ?? null, self::IDENTIFYING_COLUMNS, true)) {
+        if (! in_array($where['column'] ?? null, $this->identifyingColumns(), true)) {
             return false;
         }
 

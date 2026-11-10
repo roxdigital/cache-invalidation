@@ -27,6 +27,8 @@ use RoxDigital\CacheInvalidation\Graph\SqliteGraph;
 use RoxDigital\CacheInvalidation\Http\AddCacheTagsHeader;
 use RoxDigital\CacheInvalidation\Invalidation\GraphInvalidator;
 use RoxDigital\CacheInvalidation\Recording\DependencyRecorder;
+use RoxDigital\CacheInvalidation\Recording\TrackingAssetQueryBuilder;
+use RoxDigital\CacheInvalidation\Recording\TrackingAssetRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingEntryQueryBuilder;
 use RoxDigital\CacheInvalidation\Recording\TrackingEntryRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingFormRepository;
@@ -35,6 +37,9 @@ use RoxDigital\CacheInvalidation\Recording\TrackingNavTag;
 use RoxDigital\CacheInvalidation\Recording\TrackingNavTreeRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingTermRepository;
 use RoxDigital\CacheInvalidation\Recording\TrackingVariables;
+use Statamic\Assets\QueryBuilder as AssetQueryBuilder;
+use Statamic\Contracts\Assets\AssetRepository as AssetRepositoryContract;
+use Statamic\Contracts\Assets\QueryBuilder as AssetQueryBuilderContract;
 use Statamic\Contracts\Entries\EntryRepository as EntryRepositoryContract;
 use Statamic\Contracts\Entries\QueryBuilder as EntryQueryBuilderContract;
 use Statamic\Contracts\Forms\FormRepository as FormRepositoryContract;
@@ -313,6 +318,19 @@ class ServiceProvider extends AddonServiceProvider
 
         Statamic::repository(FormRepositoryContract::class, TrackingFormRepository::class);
 
+        // The repository first: Statamic::repository() also binds the parent's
+        // query builder over the contract, and the builder bindings below have to
+        // be the last word. AssetRepository::query() resolves the contract.
+        Statamic::repository(AssetRepositoryContract::class, TrackingAssetRepository::class);
+
+        $assetBuilder = fn (): TrackingAssetQueryBuilder => new TrackingAssetQueryBuilder(
+            $this->app->make(Stache::class)->store('assets'),
+            $recorder(),
+        );
+
+        $this->app->bind(AssetQueryBuilderContract::class, $assetBuilder);
+        $this->app->bind(AssetQueryBuilder::class, $assetBuilder);
+
         $this->forgetCachedFacades();
     }
 
@@ -336,6 +354,7 @@ class ServiceProvider extends AddonServiceProvider
             NavTreeRepositoryContract::class,
             FormRepositoryContract::class,
             VariablesContract::class,
+            AssetRepositoryContract::class,
         ] as $accessor) {
             Facade::clearResolvedInstance($accessor);
         }

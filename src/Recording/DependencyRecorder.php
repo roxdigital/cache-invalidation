@@ -131,6 +131,23 @@ final class DependencyRecorder
     }
 
     /**
+     * @param  iterable<mixed>  $ids
+     */
+    public function assets(iterable $ids): void
+    {
+        foreach ($ids as $id) {
+            if (is_string($id) && $id !== '') {
+                $this->add(Tag::asset($id));
+            }
+        }
+    }
+
+    public function assetContainer(string $handle): void
+    {
+        $this->add(Tag::assetContainer($handle));
+    }
+
+    /**
      * @return list<string>
      */
     public function tags(): array

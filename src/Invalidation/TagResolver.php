@@ -61,11 +61,35 @@ final class TagResolver
             // built from the collection.
             $item instanceof CollectionTree => [Tag::collection((string) $item->collection()->handle())],
 
-            // Assets are not tracked on the read side yet, so there is nothing to
-            // match. Statamic's own rule-based URLs still apply.
-            $item instanceof Asset => [],
+            $item instanceof Asset => $this->forAsset($item),
 
             default => [],
         };
+    }
+
+    /**
+     * An asset's id is its path, so a move or rename saves it under an id no
+     * page has recorded yet. The original path is what rendered pages carry.
+     * Statamic rewrites references stored in entries, and those saves clear their
+     * own pages, but not a path a template or global passes to the glide tag.
+     *
+     * Also the container's list tag, mirroring entries: a save can change where
+     * an asset sorts or whether it matches a filter, and an upload is an asset no
+     * page has seen yet.
+     *
+     * @return list<string>
+     */
+    private function forAsset(Asset $asset): array
+    {
+        $container = (string) $asset->container()->handle();
+
+        // getOriginal() is on Statamic's concrete asset, not the contract.
+        $original = method_exists($asset, 'getOriginal') ? $asset->getOriginal('path') : null;
+
+        return array_values(array_unique(array_filter([
+            Tag::asset((string) $asset->id()),
+            is_string($original) && $original !== '' ? Tag::asset("{$container}::{$original}") : null,
+            Tag::assetContainer($container),
+        ])));
     }
 }

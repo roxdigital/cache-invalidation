@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Saving an asset now clears the pages that show it. Setting a focal point,
+  editing alt text, replacing the file or moving it cleared nothing before: the
+  focal point lives in the asset's own meta rather than in the entry, so no entry
+  save reached the page, and asset reads were never recorded. They are now, as
+  `asset:{container}::{path}` for the assets a page shows and
+  `asset-container:{handle}` for a page that lists a container — the same item
+  and list split entries use. The assets fieldtype is an item lookup, so an image
+  field adds one tag per image and no list tag. A moved asset also clears pages
+  carrying its old path. `cache-invalidation:affected` accepts asset ids.
+
 ## [2.0.1] - 2026-09-22
 
 ### Added
