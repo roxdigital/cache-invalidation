@@ -16,8 +16,11 @@ use Statamic\Assets\AssetRepository;
  *
  * all(), whereContainer() and whereFolder() are left alone: they go through the
  * container's own query, which TrackingAssetQueryBuilder already records.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingAssetRepository extends AssetRepository
+class TrackingAssetRepository extends AssetRepository
 {
     public function __construct(
         private readonly DependencyRecorder $recorder,

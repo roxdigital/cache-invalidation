@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3] - 2026-11-10
+
+### Fixed
+
+- Host apps can mock Statamic's facades again. Laravel builds an
+  `Entry::shouldReceive()` mock from the class the facade resolves to, which is
+  this addon's tracking repository once it is installed, and those were final —
+  so every site test mocking `Entry`, `Term`, `Nav`, `Form` or `Asset` threw as
+  soon as the site upgraded to 2.x. The replaced repositories are no longer final.
+
 ## [2.0.2] - 2026-11-10
 
 ### Fixed

@@ -21,8 +21,11 @@ use Statamic\Stache\Stache;
  * The page does not display that list; Statamic just reads it while resolving the
  * URL. Suppressing the whole call and then recording the entry it returned keeps
  * the dependency that is real and drops the bookkeeping that is not.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingEntryRepository extends EntryRepository
+class TrackingEntryRepository extends EntryRepository
 {
     public function __construct(
         Stache $stache,
