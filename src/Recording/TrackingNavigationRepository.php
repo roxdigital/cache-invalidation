@@ -18,8 +18,11 @@ use Statamic\Stache\Stache;
  * all() is hooked as well, and records every nav it hands back. Missing a nav is
  * the one failure that shows: the visible menu would keep a removed item. Over-
  * recording only clears more pages than strictly necessary.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingNavigationRepository extends NavigationRepository
+class TrackingNavigationRepository extends NavigationRepository
 {
     public function __construct(
         Stache $stache,

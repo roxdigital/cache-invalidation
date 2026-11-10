@@ -14,8 +14,11 @@ use Statamic\Stache\Stache;
  *
  * ensureAssociations() is protected and must still run — it indexes the term
  * store's entry associations, without which taxonomy queries return nothing.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingTermRepository extends TermRepository
+class TrackingTermRepository extends TermRepository
 {
     public function __construct(
         Stache $stache,

@@ -15,8 +15,11 @@ use Statamic\Stache\Stache;
  * holds a Nav object and never goes back through the repository. Belt and braces
  * on purpose: an unrecorded nav means a stale menu, which is the one failure a
  * visitor notices immediately.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingNavTreeRepository extends NavTreeRepository
+class TrackingNavTreeRepository extends NavTreeRepository
 {
     public function __construct(
         Stache $stache,

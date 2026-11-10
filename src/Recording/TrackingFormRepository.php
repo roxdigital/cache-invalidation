@@ -18,8 +18,11 @@ use Statamic\Forms\FormRepository;
  * blueprint change already shows up without invalidation. This still matters for
  * form config that affects markup outside the nocache region, and for templates
  * that render a form directly.
+ *
+ * Not final: a host app's tests mock the facade over this class, which Mockery
+ * cannot do for a final one. See FacadeMockingTest.
  */
-final class TrackingFormRepository extends FormRepository
+class TrackingFormRepository extends FormRepository
 {
     public function __construct(
         private readonly DependencyRecorder $recorder,
